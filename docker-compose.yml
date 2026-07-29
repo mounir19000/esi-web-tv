@@ -26,6 +26,15 @@ services:
     volumes:
       - minio_data:/data
 
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: always
+    command: --dev --keys devkey:secret
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+
 volumes:
   pgdata:
   minio_data:
