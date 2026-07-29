@@ -1,0 +1,117 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  GUEST
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum VideoType {
+  TEACHING
+  CLUB
+  EXPLANATION
+  OTHER
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  role          Role      @default(GUEST)
+  yearGroup     String?   // e.g. "1CP", "2CP", etc.
+  
+  videos        Video[]   @relation("Uploader")
+  liveStreams   LiveStream[] @relation("Host")
+  accounts      Account[]
+  sessions      Session[]
+}
+
+model Module {
+  id          String   @id @default(cuid())
+  name        String
+  yearGroup   String   // e.g. "1CP"
+  videos      Video[]
+  liveStreams LiveStream[]
+}
+
+model Video {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  type        VideoType
+  isPublic    Boolean  @default(false)
+  url         String   // MinIO URL or path
+  thumbnailUrl String?
+  createdAt   DateTime @default(now())
+  
+  uploaderId  String
+  uploader    User     @relation("Uploader", fields: [uploaderId], references: [id])
+  
+  moduleId    String?
+  module      Module?  @relation(fields: [moduleId], references: [id])
+}
+
+model LiveStream {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  isPublic    Boolean  @default(false)
+  isLive      Boolean  @default(false)
+  streamKey   String   @unique @default(uuid())
+  startedAt   DateTime?
+  endedAt     DateTime?
+  
+  hostId      String
+  host        User     @relation("Host", fields: [hostId], references: [id])
+  
+  moduleId    String?
+  module      Module?  @relation(fields: [moduleId], references: [id])
+}
+
+// NextAuth standard tables
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?  @db.Text
+  access_token       String?  @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?  @db.Text
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
