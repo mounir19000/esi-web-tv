@@ -8,7 +8,7 @@ export default function Home() {
       <header className="glass sticky top-0 z-50">
         <div className="container flex items-center justify-between" style={{ height: "var(--header-height)" }}>
           <div className="flex items-center gap-4">
-            {/* We will replace this with the actual logo provided by the user later */}
+            <Image src="/logo_esi_seule.png" alt="ESI Logo" width={40} height={40} />
             <div className="font-bold h3 text-primary">ESI Web TV</div>
           </div>
           <nav className="flex items-center gap-6">
