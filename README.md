@@ -1,36 +1,158 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ESI Web TV
+
+ESI Web TV is a self-hosted web television platform for École nationale Supérieure d'Informatique. It gives students, teachers, admins, clubs, and public visitors one place to watch recorded videos, join live broadcasts, and manage educational media.
+
+## Features
+
+- Public video library for club content, explanations, and open broadcasts
+- Role-based access for guests, students, teachers, and admins
+- Student-scoped module content through year groups such as `1CP`, `2CP`, and `1CS`
+- Teacher dashboard for uploading MP4 videos and starting browser-based live rooms
+- Admin dashboard for creating and deleting users
+- Live streaming rooms powered by LiveKit
+- Video storage through MinIO
+- MP4 processing and thumbnail generation through FFmpeg
+- PostgreSQL database with Prisma ORM
+- End-to-end Playwright tests for auth, upload, and live flows
+
+## Tech Stack
+
+- Next.js 16 App Router
+- React 19
+- NextAuth.js v5
+- Prisma 7
+- PostgreSQL
+- MinIO
+- LiveKit
+- FFmpeg
+- Playwright
 
 ## Getting Started
 
-First, run the development server:
+Install dependencies:
+
+```bash
+npm install
+```
+
+Start the local services:
+
+```bash
+docker compose up -d
+```
+
+Create a `.env` file:
+
+```bash
+DATABASE_URL="postgresql://esitv:esitvpassword@localhost:5433/esitvdb"
+NEXTAUTH_SECRET="replace-with-a-long-random-secret"
+NEXTAUTH_URL="http://localhost:3000"
+
+LIVEKIT_API_KEY="devkey"
+LIVEKIT_API_SECRET="secret"
+NEXT_PUBLIC_LIVEKIT_URL="ws://localhost:7880"
+
+MINIO_ENDPOINT="localhost"
+MINIO_PORT="9000"
+MINIO_USE_SSL="false"
+MINIO_ROOT_USER="minioadmin"
+MINIO_ROOT_PASSWORD="minioadmin"
+NEXT_PUBLIC_MINIO_PUBLIC_URL="http://localhost:9000/esitv-videos"
+```
+
+Prepare the database and seed demo users:
+
+```bash
+npx prisma db push
+npx prisma db seed
+```
+
+Run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Demo Accounts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+After running the seed command, these local accounts are available:
 
-## Learn More
+| Role | Email | Password |
+| --- | --- | --- |
+| Admin | `admin@esi.dz` | `admin` |
+| Teacher | `teacher@esi.dz` | `teacher` |
+| Student | `student@esi.dz` | `student` |
 
-To learn more about Next.js, take a look at the following resources:
+Only `@esi.dz` email addresses are accepted.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## User Roles
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Role | Access |
+| --- | --- |
+| Guest | Can browse public videos and public live streams |
+| Student | Can access public content and videos/live rooms for their year group |
+| Teacher | Can access teaching content, upload videos, and start live streams |
+| Admin | Can manage users and access all content |
 
-## Deploy on Vercel
+## Useful Commands
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+npm run dev
+npm run build
+npm run lint
+npx playwright test
+npx prisma db seed
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Local Services
+
+The included Docker Compose file starts:
+
+| Service | URL / Port |
+| --- | --- |
+| Next.js | `http://localhost:3000` |
+| PostgreSQL | `localhost:5433` |
+| MinIO API | `http://localhost:9000` |
+| MinIO Console | `http://localhost:9001` |
+| LiveKit | `ws://localhost:7880` |
+
+## Video Upload Notes
+
+Uploaded MP4 files are written to a temporary folder, processed with FFmpeg, and stored in MinIO. For production, move the processing work to a background queue such as BullMQ, a worker service, or a job runner on the VM.
+
+Make sure FFmpeg is installed on the host that runs the Next.js server:
+
+```bash
+ffmpeg -version
+```
+
+## Testing
+
+Run the full browser test suite:
+
+```bash
+npx playwright test
+```
+
+The tests cover:
+
+- Teacher login and dashboard access
+- Student restriction from upload pages
+- Teacher video upload flow
+- Teacher live stream creation flow
+
+## Repository
+
+Recommended repository name:
+
+```text
+esi-web-tv
+```
+
+Recommended repository description:
+
+```text
+Self-hosted ESI Web TV platform for live classes, educational videos, club content, and role-based media access.
+```
