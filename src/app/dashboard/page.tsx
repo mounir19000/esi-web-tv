@@ -14,21 +14,6 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <header className="glass sticky top-0 z-50">
-        <div className="container flex items-center justify-between" style={{ height: "var(--header-height)" }}>
-          <div className="flex items-center gap-4">
-            <Image src="/logo_esi_seule.png" alt="ESI Logo" width={40} height={40} />
-            <Link href="/" className="font-bold h3 text-primary no-underline text-inherit">ESI Web TV</Link>
-          </div>
-          <nav className="flex items-center gap-6">
-            <Link href="/explore" className="font-medium hover:text-brand-primary transition">Explore</Link>
-            <Link href="/dashboard" className="font-medium text-brand-primary">Dashboard</Link>
-            {/* Replace with real signout logic later */}
-            <span className="text-sm font-medium">{email}</span>
-          </nav>
-        </div>
-      </header>
-
       <main className="flex-1 container mt-8 mb-8">
         <div className="flex items-center justify-between mb-8 pb-4 border-b border-border-color">
           <div>
@@ -40,6 +25,9 @@ export default async function DashboardPage() {
           </div>
           {(role === "TEACHER" || role === "ADMIN") && (
             <div className="flex gap-4">
+              {role === "ADMIN" && (
+                <Link href="/dashboard/users" className="btn-outline text-brand-primary">Manage Users</Link>
+              )}
               <Link href="/dashboard/upload" className="btn-outline">Upload Video</Link>
               <Link href="/live/new" className="btn-primary">Go Live Now</Link>
             </div>

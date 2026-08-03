@@ -1,44 +1,56 @@
 import Link from "next/link";
 import Image from "next/image";
+import prisma from "@/lib/prisma";
 
-export default function ExplorePage() {
+export default async function ExplorePage() {
+  const videos = await prisma.video.findMany({
+    orderBy: { createdAt: 'desc' },
+    include: { uploader: true }
+  });
+
   return (
     <div className="flex flex-col min-h-screen">
-      <header className="glass sticky top-0 z-50">
-        <div className="container flex items-center justify-between" style={{ height: "var(--header-height)" }}>
-          <div className="flex items-center gap-4">
-            <Image src="/logo_esi_seule.png" alt="ESI Logo" width={40} height={40} />
-            <Link href="/" className="font-bold h3 text-primary no-underline text-inherit">ESI Web TV</Link>
-          </div>
-          <nav className="flex items-center gap-6">
-            <Link href="/explore" className="font-medium text-brand-primary">Explore</Link>
-            <Link href="/live" className="font-medium hover:text-brand-primary transition">Live Channels</Link>
-            <Link href="/dashboard" className="font-medium hover:text-brand-primary transition">Dashboard</Link>
-          </nav>
+      <main className="flex-1 container mt-8 mb-20 animate-fade-up">
+        <div className="mb-12">
+          <h1 className="h1 mb-2">Explore Videos</h1>
+          <p className="text-text-secondary">Discover recorded lectures, club activities, and more.</p>
         </div>
-      </header>
-
-      <main className="flex-1 container mt-8 mb-8">
-        <h1 className="h1 mb-8">Explore Videos</h1>
         
-        {/* Filters */}
-        <div className="flex gap-4 mb-8 pb-4 border-b border-border-color overflow-x-auto">
-          <button className="btn-primary">All</button>
-          <button className="btn-outline">Teaching</button>
-          <button className="btn-outline">School Clubs</button>
-          <button className="btn-outline">Explanations</button>
-        </div>
-
-        {/* Video Grid */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-            <div key={i} className="card p-4">
-              <div className="bg-gray-200 aspect-video rounded-md mb-4 relative" style={{ backgroundColor: "#e2e8f0", aspectRatio: "16/9" }}>
-                <span className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded-sm">12:30</span>
-              </div>
-              <h3 className="font-semibold mb-1 line-clamp-2">How to build a Next.js App - Web Dev Club</h3>
-              <p className="text-sm text-text-secondary">Web Dev Club • 2 days ago</p>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+          {videos.length === 0 && (
+            <div className="col-span-full text-center py-12 text-text-secondary bg-surface rounded-xl border border-border">
+              No videos uploaded yet.
             </div>
+          )}
+          {videos.map((video) => (
+            <Link href={`/video/${video.id}`} key={video.id} className="card group block">
+              <div className="bg-black aspect-video relative overflow-hidden flex items-center justify-center">
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition duration-300 z-10"></div>
+                <div className="absolute top-3 left-3 bg-brand-primary text-white text-xs font-bold px-3 py-1 rounded-sm uppercase tracking-wider shadow-lg z-20">
+                  {video.type}
+                </div>
+                <span className="text-gray-500 font-medium z-0 group-hover:scale-110 transition duration-500">Video Preview</span>
+                
+                {/* Play Button Overlay */}
+                <div className="absolute inset-0 flex items-center justify-center z-20 opacity-0 group-hover:opacity-100 transition duration-300 transform translate-y-4 group-hover:translate-y-0">
+                  <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-glow">
+                    <div className="w-0 h-0 border-t-8 border-t-transparent border-l-[14px] border-l-brand-primary border-b-8 border-b-transparent ml-1"></div>
+                  </div>
+                </div>
+              </div>
+              <div className="p-5">
+                <h3 className="h3 mb-2 text-base leading-tight group-hover:text-brand-primary transition line-clamp-2">{video.title}</h3>
+                <div className="flex items-center justify-between text-sm text-text-secondary">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center font-bold text-xs">
+                      {video.uploader.name?.[0]?.toUpperCase() || 'U'}
+                    </span>
+                    <span>{video.uploader.name}</span>
+                  </div>
+                  <span>{video.createdAt.toLocaleDateString()}</span>
+                </div>
+              </div>
+            </Link>
           ))}
         </div>
       </main>
