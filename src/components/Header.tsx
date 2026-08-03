@@ -4,20 +4,30 @@ import Image from "next/image";
 
 export default async function Header() {
   const session = await auth();
+  const canCreate = session?.user?.role === "TEACHER" || session?.user?.role === "ADMIN";
 
   return (
-    <header className="glass sticky top-0 z-50">
-      <div className="container flex items-center justify-between" style={{ height: "var(--header-height)" }}>
-        <div className="flex items-center gap-4">
-          <Image src="/logo_esi_seule.png" alt="ESI Logo" width={40} height={40} />
-          <Link href="/" className="font-bold h3 text-primary no-underline text-inherit">ESI Web TV</Link>
-        </div>
-        <nav className="flex items-center gap-6">
-          <Link href="/explore" className="font-medium hover:text-brand-primary transition">Explore</Link>
-          <Link href="/live" className="font-medium hover:text-brand-primary transition">Live Channels</Link>
+    <header className="site-header">
+      <div className="container header-inner">
+        <Link href="/" className="brand-link" aria-label="ESI Web TV home">
+          <Image src="/logo_esi_seule.png" alt="" width={42} height={42} className="brand-mark" priority />
+          <span className="brand-text">
+            <span className="brand-name">ESI Web TV</span>
+            <span className="brand-subtitle">Courses, clubs, live</span>
+          </span>
+        </Link>
+
+        <nav className="primary-nav" aria-label="Main navigation">
+          <Link href="/explore" className="nav-link">Explore</Link>
+          <Link href="/live" className="nav-link">Live</Link>
           {session?.user ? (
             <>
-              <Link href="/dashboard" className="font-medium hover:text-brand-primary transition">Dashboard</Link>
+              <Link href="/dashboard" className="nav-link">Dashboard</Link>
+              {canCreate && <Link href="/dashboard/upload" className="nav-link">Upload</Link>}
+              {canCreate && <Link href="/live/new" className="nav-link">Go Live</Link>}
+              <span className="nav-link user-pill" title={session.user.email || session.user.name || "Signed in"}>
+                {session.user.name || session.user.email}
+              </span>
               <form
                 action={async () => {
                   "use server";
@@ -25,11 +35,11 @@ export default async function Header() {
                   await signOut({ redirectTo: "/" });
                 }}
               >
-                <button type="submit" className="btn-outline text-xs py-1 px-2">Sign Out ({session.user.name})</button>
+                <button type="submit" className="nav-button">Sign out</button>
               </form>
             </>
           ) : (
-            <Link href="/api/auth/signin" className="btn-primary text-xs py-1 px-2">Sign In</Link>
+            <Link href="/login" className="button">Sign in</Link>
           )}
         </nav>
       </div>

@@ -1,86 +1,128 @@
-import Image from "next/image";
-import Link from "next/link";
+import type { Metadata } from "next"
+import Image from "next/image"
+import Link from "next/link"
+import { auth } from "@/auth"
+import prisma from "@/lib/prisma"
+import { visibleLiveStreamWhere, visibleVideoWhere } from "@/lib/content-access"
+import { LiveStreamCard, VideoCard } from "@/components/ContentCards"
 
-export default function Home() {
+export const dynamic = "force-dynamic"
+
+export const metadata: Metadata = {
+  title: "ESI Web TV | Courses, Clubs, Live",
+}
+
+export default async function Home() {
+  const session = await auth()
+  const viewer = session?.user
+
+  const [liveStreams, videos, videoCount, moduleCount] = await Promise.all([
+    prisma.liveStream.findMany({
+      where: { isLive: true, ...visibleLiveStreamWhere(viewer) },
+      orderBy: { startedAt: "desc" },
+      take: 3,
+      include: { host: true, module: true },
+    }),
+    prisma.video.findMany({
+      where: visibleVideoWhere(viewer),
+      orderBy: { createdAt: "desc" },
+      take: 4,
+      include: { uploader: true, module: true },
+    }),
+    prisma.video.count({ where: visibleVideoWhere(viewer) }),
+    prisma.module.count(),
+  ])
+
   return (
-    <div className="flex flex-col min-h-screen">
-      <main className="flex-1">
-        {/* Stunning Hero Section */}
-        <section className="relative overflow-hidden py-20 mb-12">
-          {/* Background decorative blobs */}
-          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-brand-primary rounded-full mix-blend-multiply filter blur-[100px] opacity-10 animate-pulse-soft pointer-events-none"></div>
-          <div className="absolute top-1/2 left-[60%] transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-cyan-400 rounded-full mix-blend-multiply filter blur-[100px] opacity-10 animate-pulse-soft pointer-events-none" style={{ animationDelay: '1s' }}></div>
-
-          <div className="container relative z-10 text-center animate-fade-up">
-            <div className="inline-block px-4 py-1.5 mb-6 rounded-full glass text-sm font-semibold text-brand-primary tracking-wider uppercase shadow-sm">
-              ✨ Welcome to the future of learning
+    <>
+      <main className="page">
+        <section className="container hero">
+          <div className="hero-grid">
+            <div className="hero-copy">
+              <p className="eyebrow">École nationale Supérieure d&apos;Informatique</p>
+              <h1 className="page-title">ESI Web TV</h1>
+              <p className="lead">
+                Live rooms, teaching videos, explanations, and club broadcasts for the ESI community.
+              </p>
+              <div className="actions">
+                <Link href="/explore" className="button">Explore videos</Link>
+                <Link href="/live" className="button-secondary">View live channels</Link>
+                {!viewer && <Link href="/login" className="button-quiet">Sign in</Link>}
+              </div>
             </div>
-            <h1 className="h1 mb-6 max-w-4xl mx-auto">
-              The Official Web TV for <br/>
-              <span className="text-gradient">École nationale Supérieure d'Informatique</span>
-            </h1>
-            <p className="p-lead mb-10 max-w-2xl mx-auto">
-              Experience education like never before. Watch high-quality live streams, explore rich educational modules, and connect with ESI clubs all in one place.
-            </p>
-            <div className="flex justify-center gap-4 flex-wrap">
-              <Link href="/explore" className="btn-primary py-3 px-8 text-lg">Start Exploring</Link>
-              <Link href="/live" className="btn-outline py-3 px-8 text-lg">View Live Channels</Link>
+
+            <div className="hero-visual" aria-label="ESI Web TV overview">
+              <Image src="/logo_esi.png" alt="ESI" width={858} height={357} className="hero-logo" priority />
+              <div className="hero-kpis">
+                <div className="kpi">
+                  <strong>{liveStreams.length}</strong>
+                  <span>live now</span>
+                </div>
+                <div className="kpi">
+                  <strong>{videoCount}</strong>
+                  <span>videos</span>
+                </div>
+                <div className="kpi">
+                  <strong>{moduleCount}</strong>
+                  <span>modules</span>
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
-        {/* Featured Section */}
-        <section className="container mb-20 animate-fade-up" style={{ animationDelay: '0.2s' }}>
-          <div className="flex justify-between items-end mb-8">
+        <section className="container section">
+          <div className="section-header">
             <div>
-              <h2 className="h2 mb-2">Featured Live Channels</h2>
-              <p className="text-text-secondary">Join ongoing classes and events happening right now.</p>
+              <h2 className="section-title">Live Now</h2>
+              <p className="muted">Active broadcasts available to your role.</p>
             </div>
-            <Link href="/live" className="text-brand-primary font-medium hover:underline flex items-center gap-1">
-              View all <span>→</span>
-            </Link>
+            <Link href="/live" className="button-secondary">All live channels</Link>
           </div>
-          
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
-            {/* Dummy Cards for Design Setup */}
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="card group">
-                <div className="bg-black aspect-video relative overflow-hidden flex items-center justify-center">
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition duration-300 z-10"></div>
-                  <div className="absolute top-3 left-3 bg-error-color text-white text-xs font-bold px-3 py-1 rounded-sm uppercase tracking-wider animate-pulse shadow-lg z-20">
-                    LIVE
-                  </div>
-                  <span className="text-gray-500 font-medium z-0 group-hover:scale-110 transition duration-500">Video Preview</span>
-                  
-                  {/* Play Button Overlay */}
-                  <div className="absolute inset-0 flex items-center justify-center z-20 opacity-0 group-hover:opacity-100 transition duration-300 transform translate-y-4 group-hover:translate-y-0">
-                    <div className="w-16 h-16 bg-brand-primary rounded-full flex items-center justify-center shadow-glow">
-                      <div className="w-0 h-0 border-t-8 border-t-transparent border-l-[14px] border-l-white border-b-8 border-b-transparent ml-1"></div>
-                    </div>
-                  </div>
-                </div>
-                <div className="p-6">
-                  <h3 className="h3 mb-2 text-lg leading-tight group-hover:text-brand-primary transition">Introduction to Web Development - 1CP</h3>
-                  <div className="flex items-center gap-2 text-sm text-text-secondary mb-6">
-                    <span className="w-6 h-6 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center font-bold text-xs">Dr</span>
-                    <span>Dr. Ahmed</span>
-                    <span className="mx-1">•</span>
-                    <span className="flex items-center gap-1">👁️ 120 watching</span>
-                  </div>
-                  <Link href={`/live/${i}`} className="btn-outline w-full text-center py-2">Join Stream</Link>
-                </div>
-              </div>
-            ))}
+
+          {liveStreams.length === 0 ? (
+            <div className="empty-state">
+              <h3 className="card-title">No broadcasts are live</h3>
+              <p className="muted">Recent videos are still available in Explore.</p>
+            </div>
+          ) : (
+            <div className="grid video-grid">
+              {liveStreams.map((stream) => (
+                <LiveStreamCard key={stream.id} stream={stream} />
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="container section">
+          <div className="section-header">
+            <div>
+              <h2 className="section-title">Latest Videos</h2>
+              <p className="muted">Public videos and the module content available to you.</p>
+            </div>
+            <Link href="/explore" className="button-secondary">Browse library</Link>
           </div>
+
+          {videos.length === 0 ? (
+            <div className="empty-state">
+              <h3 className="card-title">No videos yet</h3>
+              <p className="muted">Teachers and admins can publish the first upload from the dashboard.</p>
+            </div>
+          ) : (
+            <div className="grid video-grid">
+              {videos.map((video) => (
+                <VideoCard key={video.id} video={video} />
+              ))}
+            </div>
+          )}
         </section>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-border-color py-8 mt-auto bg-bg-secondary">
-        <div className="container text-center text-text-secondary text-sm">
-          &copy; {new Date().getFullYear()} École nationale Supérieure d'Informatique. All rights reserved.
+      <footer className="footer">
+        <div className="container small">
+          © {new Date().getFullYear()} École nationale Supérieure d&apos;Informatique.
         </div>
       </footer>
-    </div>
-  );
+    </>
+  )
 }

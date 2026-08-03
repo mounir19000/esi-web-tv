@@ -1,11 +1,12 @@
 import ffmpeg from 'fluent-ffmpeg'
-import { minioClient } from './minio'
+import { initBuckets, minioClient, VIDEO_BUCKET_NAME } from './minio'
 import fs from 'fs'
 import path from 'path'
 
-const BUCKET_NAME = 'esitv-videos'
-
 export const transcodeAndUpload = async (inputFilePath: string, videoId: string) => {
+  await initBuckets()
+  let thumbnailUrl: string | null = null
+
   const resolutions = [
     { name: '480p', width: 854, height: 480 },
     { name: '720p', width: 1280, height: 720 },
@@ -27,7 +28,7 @@ export const transcodeAndUpload = async (inputFilePath: string, videoId: string)
         .on('end', async () => {
           try {
             // Upload to MinIO
-            await minioClient.fPutObject(BUCKET_NAME, `videos/${outputFileName}`, outputFilePath)
+            await minioClient.fPutObject(VIDEO_BUCKET_NAME, `videos/${outputFileName}`, outputFilePath)
             // Clean up tmp file
             fs.unlinkSync(outputFilePath)
             resolve(true)
@@ -56,15 +57,26 @@ export const transcodeAndUpload = async (inputFilePath: string, videoId: string)
       })
       .on('end', async () => {
         try {
-          await minioClient.fPutObject(BUCKET_NAME, `thumbnails/${thumbName}`, thumbPath)
+          if (!fs.existsSync(thumbPath)) {
+            resolve(true)
+            return
+          }
+          await minioClient.fPutObject(VIDEO_BUCKET_NAME, `thumbnails/${thumbName}`, thumbPath)
+          thumbnailUrl = `thumbnails/${thumbName}`
           fs.unlinkSync(thumbPath)
           resolve(true)
         } catch (err) {
           reject(err)
         }
       })
+      .on('error', () => resolve(true))
   })
 
   // Clean up original input file
   fs.unlinkSync(inputFilePath)
+
+  return {
+    videoUrl: `videos/${videoId}-720p.mp4`,
+    thumbnailUrl,
+  }
 }

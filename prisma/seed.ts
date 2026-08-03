@@ -13,9 +13,13 @@ async function main() {
   ]
 
   for (const m of modules) {
-    await prisma.module.create({
-      data: m
+    const existingModule = await prisma.module.findFirst({
+      where: { name: m.name, yearGroup: m.yearGroup },
     })
+
+    if (!existingModule) {
+      await prisma.module.create({ data: m })
+    }
   }
   
   console.log('Modules seeded successfully!')
@@ -23,41 +27,33 @@ async function main() {
   console.log('Seeding admin user...')
   const hashedPassword = await bcrypt.hash('admin', 10)
   
-  const adminExists = await prisma.user.findUnique({
-    where: { email: 'admin@esi.dz' }
+  await prisma.user.upsert({
+    where: { email: 'admin@esi.dz' },
+    update: { name: 'Super Admin', password: hashedPassword, role: 'ADMIN', yearGroup: null },
+    create: {
+      name: 'Super Admin',
+      email: 'admin@esi.dz',
+      password: hashedPassword,
+      role: 'ADMIN',
+    },
   })
-  
-  if (!adminExists) {
-    await prisma.user.create({
-      data: {
-        name: 'Super Admin',
-        email: 'admin@esi.dz',
-        password: hashedPassword,
-        role: 'ADMIN',
-      }
-    })
-    console.log('Admin seeded successfully!')
-  } else {
-    console.log('Admin user already exists.')
-  }
+  console.log('Admin seeded successfully!')
 
   console.log('Seeding teacher and student for tests...')
   const teacherPassword = await bcrypt.hash('teacher', 10)
   const studentPassword = await bcrypt.hash('student', 10)
 
-  const teacherExists = await prisma.user.findUnique({ where: { email: 'teacher@esi.dz' } })
-  if (!teacherExists) {
-    await prisma.user.create({
-      data: { name: 'Test Teacher', email: 'teacher@esi.dz', password: teacherPassword, role: 'TEACHER' }
-    })
-  }
+  await prisma.user.upsert({
+    where: { email: 'teacher@esi.dz' },
+    update: { name: 'Test Teacher', password: teacherPassword, role: 'TEACHER', yearGroup: null },
+    create: { name: 'Test Teacher', email: 'teacher@esi.dz', password: teacherPassword, role: 'TEACHER' },
+  })
 
-  const studentExists = await prisma.user.findUnique({ where: { email: 'student@esi.dz' } })
-  if (!studentExists) {
-    await prisma.user.create({
-      data: { name: 'Test Student', email: 'student@esi.dz', password: studentPassword, role: 'STUDENT' }
-    })
-  }
+  await prisma.user.upsert({
+    where: { email: 'student@esi.dz' },
+    update: { name: 'Test Student', password: studentPassword, role: 'STUDENT', yearGroup: '1CP' },
+    create: { name: 'Test Student', email: 'student@esi.dz', password: studentPassword, role: 'STUDENT', yearGroup: '1CP' },
+  })
 }
 
 main()

@@ -1,16 +1,11 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
+import { login } from './helpers';
 
 test.describe('Video Upload Flow', () => {
   test('teacher can upload a video', async ({ page }) => {
     // 1. Log in as teacher
-    await page.goto('/api/auth/signin');
-    await page.fill('input[name="email"]', 'teacher@esi.dz');
-    await page.fill('input[name="password"]', 'teacher');
-    await page.click('button:has-text("Sign in with Credentials")');
-
-    // Wait for redirect to home
-    await expect(page.locator('text=Sign Out')).toBeVisible();
+    await login(page, 'teacher@esi.dz', 'teacher');
 
     // 2. Go to upload page
     await page.goto('/dashboard/upload');
@@ -28,13 +23,12 @@ test.describe('Video Upload Flow', () => {
     await fileInput.setInputFiles(path.join(__dirname, 'dummy.mp4'));
 
     // 4. Submit form
-    await page.click('button:has-text("Upload & Process")');
+    await page.click('button:has-text("Upload and process")');
 
-    // 5. Verify redirection to explore page and presence of video
-    await page.waitForURL('**/explore');
-    await expect(page.locator('h1').first()).toHaveText('Explore Videos');
+    // 5. Verify redirection to the watch page and presence of video
+    await page.waitForURL(/\/video\/[a-zA-Z0-9-]+/);
     
     // The video should be in the grid
-    await expect(page.locator('text=E2E Test Video: Next.js').first()).toBeVisible();
+    await expect(page.locator('h1').first()).toHaveText('E2E Test Video: Next.js');
   });
 });

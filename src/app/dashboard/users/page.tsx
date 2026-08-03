@@ -1,7 +1,14 @@
+import type { Metadata } from "next"
+import { redirect } from "next/navigation"
 import { auth } from "@/auth"
 import prisma from "@/lib/prisma"
-import { redirect } from "next/navigation"
 import { createUser, deleteUser } from "./actions"
+
+export const dynamic = "force-dynamic"
+
+export const metadata: Metadata = {
+  title: "Users | ESI Web TV",
+}
 
 export default async function UsersPage() {
   const session = await auth()
@@ -10,96 +17,108 @@ export default async function UsersPage() {
   }
 
   const users = await prisma.user.findMany({
-    orderBy: { email: "asc" }
+    orderBy: [{ role: "asc" }, { email: "asc" }],
   })
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-8">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">User Management</h1>
-      </div>
-
-      <div className="grid md:grid-cols-3 gap-8">
-        <div className="md:col-span-1 bg-white p-6 rounded-lg shadow border">
-          <h2 className="text-xl font-semibold mb-4">Create New User</h2>
-          <form action={createUser} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Name</label>
-              <input name="name" type="text" required className="w-full border rounded p-2" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Email</label>
-              <input name="email" type="email" required className="w-full border rounded p-2" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Password</label>
-              <input name="password" type="password" required className="w-full border rounded p-2" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Role</label>
-              <select name="role" required className="w-full border rounded p-2">
-                <option value="GUEST">Guest</option>
-                <option value="STUDENT">Student</option>
-                <option value="TEACHER">Teacher</option>
-                <option value="ADMIN">Admin</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Year Group (Optional)</label>
-              <input name="yearGroup" type="text" placeholder="e.g. 1CP" className="w-full border rounded p-2" />
-            </div>
-            <button type="submit" className="w-full bg-blue-600 text-white rounded p-2 hover:bg-blue-700 transition">
-              Create User
-            </button>
-          </form>
-        </div>
-
-        <div className="md:col-span-2 bg-white p-6 rounded-lg shadow border overflow-hidden">
-          <h2 className="text-xl font-semibold mb-4">Existing Users</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b">
-                  <th className="py-2 px-4">Name</th>
-                  <th className="py-2 px-4">Email</th>
-                  <th className="py-2 px-4">Role</th>
-                  <th className="py-2 px-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => (
-                  <tr key={u.id} className="border-b hover:bg-gray-50">
-                    <td className="py-2 px-4">{u.name}</td>
-                    <td className="py-2 px-4">{u.email}</td>
-                    <td className="py-2 px-4">
-                      <span className="bg-gray-200 text-gray-800 text-xs px-2 py-1 rounded-full">
-                        {u.role}
-                      </span>
-                    </td>
-                    <td className="py-2 px-4">
-                      <form action={async () => {
-                        "use server"
-                        await deleteUser(u.id)
-                      }}>
-                        <button type="submit" className="text-red-600 hover:text-red-800 text-sm font-medium">
-                          Delete
-                        </button>
-                      </form>
-                    </td>
-                  </tr>
-                ))}
-                {users.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="py-4 text-center text-gray-500">
-                      No users found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+    <main className="page">
+      <section className="container">
+        <div className="section-header">
+          <div>
+            <p className="eyebrow">Administration</p>
+            <h1 className="page-title">User Management</h1>
+            <p className="lead">Create ESI accounts and keep roles aligned with platform access.</p>
           </div>
         </div>
-      </div>
-    </div>
+
+        <div className="split-layout">
+          <aside className="panel">
+            <div className="panel-header">
+              <h2 className="section-title">Create user</h2>
+            </div>
+            <form action={createUser} className="form-stack">
+              <div className="field">
+                <label htmlFor="name">Name</label>
+                <input id="name" name="name" type="text" required className="form-input" />
+              </div>
+              <div className="field">
+                <label htmlFor="email">Email</label>
+                <input id="email" name="email" type="email" required className="form-input" placeholder="name@esi.dz" />
+              </div>
+              <div className="field">
+                <label htmlFor="password">Password</label>
+                <input id="password" name="password" type="password" required className="form-input" />
+              </div>
+              <div className="field">
+                <label htmlFor="role">Role</label>
+                <select id="role" name="role" required className="form-select" defaultValue="STUDENT">
+                  <option value="GUEST">Guest</option>
+                  <option value="STUDENT">Student</option>
+                  <option value="TEACHER">Teacher</option>
+                  <option value="ADMIN">Admin</option>
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="yearGroup">Year group</label>
+                <input id="yearGroup" name="yearGroup" type="text" placeholder="1CP" className="form-input" />
+              </div>
+              <button type="submit" className="button">Create user</button>
+            </form>
+          </aside>
+
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <h2 className="section-title">Existing users</h2>
+                <p className="muted">{users.length} account{users.length === 1 ? "" : "s"}</p>
+              </div>
+            </div>
+
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Year</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((user) => (
+                    <tr key={user.id}>
+                      <td>{user.name || "Unnamed"}</td>
+                      <td>{user.email}</td>
+                      <td><span className="badge">{user.role}</span></td>
+                      <td>{user.yearGroup || "-"}</td>
+                      <td>
+                        {user.id === session.user.id ? (
+                          <span className="muted small">Current user</span>
+                        ) : (
+                          <form
+                            action={async () => {
+                              "use server"
+                              await deleteUser(user.id)
+                            }}
+                          >
+                            <button type="submit" className="button-quiet">Delete</button>
+                          </form>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {users.length === 0 && (
+                    <tr>
+                      <td colSpan={5}>No users found.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
   )
 }

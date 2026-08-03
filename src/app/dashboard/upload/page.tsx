@@ -1,152 +1,196 @@
-import { auth } from "@/auth";
-import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
-import prisma from "@/lib/prisma";
-import fs from "fs";
-import path from "path";
-import { transcodeAndUpload } from "@/lib/ffmpeg";
+import type { Metadata } from "next"
+import { redirect } from "next/navigation"
+import { revalidatePath } from "next/cache"
+import { VideoType } from "@prisma/client"
+import { v4 as uuidv4 } from "uuid"
+import fs from "fs"
+import path from "path"
+import { auth } from "@/auth"
+import prisma from "@/lib/prisma"
+import { transcodeAndUpload } from "@/lib/ffmpeg"
+
+export const dynamic = "force-dynamic"
+
+export const metadata: Metadata = {
+  title: "Upload Video | ESI Web TV",
+}
+
+const allowedVideoTypes = new Set<string>(Object.values(VideoType))
+const maxUploadBytes = 1024 * 1024 * 1024
 
 export default async function UploadVideoPage() {
-  const session = await auth();
-  if (!session?.user || (session.user.role !== "TEACHER" && session.user.role !== "ADMIN")) {
-    redirect("/");
+  const session = await auth()
+  if (!session?.user) {
+    redirect("/login?callbackUrl=/dashboard/upload")
+  }
+  if (session.user.role !== "TEACHER" && session.user.role !== "ADMIN") {
+    redirect("/dashboard")
   }
 
   const modules = await prisma.module.findMany({
-    orderBy: { yearGroup: 'asc' }
-  });
+    orderBy: [{ yearGroup: "asc" }, { name: "asc" }],
+  })
 
   async function uploadVideo(formData: FormData) {
-    "use server";
-    const session = await auth();
+    "use server"
+
+    const session = await auth()
     if (!session?.user || (session.user.role !== "TEACHER" && session.user.role !== "ADMIN")) {
-      throw new Error("Unauthorized");
+      throw new Error("Unauthorized")
     }
 
-    const title = formData.get("title") as string;
-    const description = formData.get("description") as string;
-    const type = formData.get("type") as any;
-    const moduleId = formData.get("moduleId") as string | null;
-    const file = formData.get("file") as File;
+    const title = String(formData.get("title") || "").trim()
+    const description = String(formData.get("description") || "").trim()
+    const requestedType = String(formData.get("type") || "OTHER")
+    const moduleId = String(formData.get("moduleId") || "")
+    const file = formData.get("file")
 
-    if (!file || file.size === 0) {
-      throw new Error("No file uploaded");
+    if (!title) {
+      throw new Error("Video title is required")
     }
 
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    
-    // Create a temporary file path
-    const tempDir = path.join("/tmp", "esitv-uploads");
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
+    if (!allowedVideoTypes.has(requestedType)) {
+      throw new Error("Invalid video type")
     }
-    const tempFileName = `${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
-    const tempPath = path.join(tempDir, tempFileName);
 
-    // Save uploaded file to disk
-    fs.writeFileSync(tempPath, buffer);
+    if (!(file instanceof File) || file.size === 0) {
+      throw new Error("Upload a valid MP4 file")
+    }
 
-    // Create the video record in DB first to get an ID
+    if (file.size > maxUploadBytes) {
+      throw new Error("Video file is too large")
+    }
+
+    if (file.type && file.type !== "video/mp4") {
+      throw new Error("Only MP4 files are supported")
+    }
+
+    const selectedModule = moduleId
+      ? await prisma.module.findUnique({ where: { id: moduleId }, select: { id: true } })
+      : null
+
+    if (moduleId && !selectedModule) {
+      throw new Error("Selected module was not found")
+    }
+
+    const videoId = uuidv4()
+    const tempDir = path.join("/tmp", "esitv-uploads")
+    fs.mkdirSync(tempDir, { recursive: true })
+
+    const tempPath = path.join(tempDir, `${videoId}.mp4`)
+    const buffer = Buffer.from(await file.arrayBuffer())
+    fs.writeFileSync(tempPath, buffer)
+
+    const isPublic =
+      formData.get("isPublic") === "on" ||
+      requestedType === "CLUB" ||
+      requestedType === "EXPLANATION"
+
     const video = await prisma.video.create({
       data: {
+        id: videoId,
         title,
         description,
-        type: type || "OTHER",
-        isPublic: type === "EXPLANATION",
-        url: `videos/${tempFileName.replace(".mp4", "")}`, // We'll update this properly if needed, but minio structure handles names
-        uploaderId: session.user.id!,
-        ...(moduleId ? { moduleId } : {})
-      }
-    });
+        type: requestedType as VideoType,
+        isPublic,
+        url: `videos/${videoId}-720p.mp4`,
+        thumbnailUrl: null,
+        uploaderId: session.user.id,
+        ...(selectedModule ? { moduleId: selectedModule.id } : {}),
+      },
+    })
 
-    // Fire and forget transcoding
-    // In a production app, use BullMQ, Redis, or an AWS Lambda/SQS pipeline.
-    // For this prototype, we'll run it asynchronously without awaiting.
-    transcodeAndUpload(tempPath, video.id).catch(err => {
-      console.error(`Failed to transcode video ${video.id}:`, err);
-    });
-    
-    revalidatePath("/explore");
-    redirect("/explore");
+    transcodeAndUpload(tempPath, video.id)
+      .then(async ({ videoUrl, thumbnailUrl }) => {
+        await prisma.video.update({
+          where: { id: video.id },
+          data: { url: videoUrl, thumbnailUrl },
+        })
+      })
+      .catch((error) => {
+        console.error(`Failed to process uploaded video ${video.id}:`, error)
+        fs.rmSync(tempPath, { force: true })
+      })
+
+    revalidatePath("/")
+    revalidatePath("/explore")
+    revalidatePath("/dashboard")
+    redirect(`/video/${video.id}`)
   }
 
   return (
-    <div className="container mt-12 mb-20 max-w-2xl mx-auto animate-fade-up">
-      <div className="card p-8 shadow-lg">
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-brand-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-brand-primary text-2xl">📤</span>
+    <main className="page-narrow">
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">Publishing</p>
+            <h1 className="section-title">Upload Video</h1>
+            <p className="lead">Add an MP4 recording for modules, explanations, or club activity.</p>
           </div>
-          <h1 className="h2 mb-2">Upload Video</h1>
-          <p className="text-text-secondary">Upload recorded lectures or club activities in MP4 format.</p>
         </div>
-        
-        <form action={uploadVideo} className="flex flex-col gap-6">
-          <div className="form-group">
-            <label htmlFor="title" className="form-label">Video Title</label>
-            <input 
-              type="text" 
-              id="title" 
-              name="title" 
+
+        <form action={uploadVideo} className="form-stack">
+          <div className="field">
+            <label htmlFor="title">Video title</label>
+            <input
+              type="text"
+              id="title"
+              name="title"
               required
               className="form-input"
-              placeholder="e.g. Next.js App Router Masterclass"
+              placeholder="Introduction to Web Development"
             />
           </div>
 
-          <div className="form-group">
-            <label htmlFor="description" className="form-label">Description</label>
-            <textarea 
-              id="description" 
-              name="description" 
+          <div className="field">
+            <label htmlFor="description">Description</label>
+            <textarea
+              id="description"
+              name="description"
               rows={4}
-              className="form-input"
-              placeholder="What is this video about?"
+              className="form-textarea"
+              placeholder="Topic, session, speaker, or notes"
             />
           </div>
 
-          <div className="form-group">
-            <label htmlFor="type" className="form-label">Video Type</label>
-            <select id="type" name="type" className="form-input" required>
-              <option value="TEACHING">Teaching (Lectures, Tutorials)</option>
-              <option value="CLUB">Club Activity</option>
-              <option value="EXPLANATION">Explanation (Public)</option>
-              <option value="OTHER">Other</option>
-            </select>
-          </div>
+          <div className="grid grid-2">
+            <div className="field">
+              <label htmlFor="type">Video type</label>
+              <select id="type" name="type" className="form-select" required defaultValue="TEACHING">
+                <option value="TEACHING">Teaching</option>
+                <option value="CLUB">Club</option>
+                <option value="EXPLANATION">Explanation</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </div>
 
-          <div className="form-group">
-            <label htmlFor="moduleId" className="form-label">Associated Module (Optional)</label>
-            <select id="moduleId" name="moduleId" className="form-input">
-              <option value="">None / General</option>
-              {modules.map((m) => (
-                <option key={m.id} value={m.id}>
-                  [{m.yearGroup}] {m.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="file" className="form-label">Video File (.mp4)</label>
-            <div className="relative">
-              <input 
-                type="file" 
-                id="file" 
-                name="file" 
-                accept="video/mp4"
-                required
-                className="form-input pt-[1.2rem]"
-              />
+            <div className="field">
+              <label htmlFor="moduleId">Module</label>
+              <select id="moduleId" name="moduleId" className="form-select" defaultValue="">
+                <option value="">General</option>
+                {modules.map((module) => (
+                  <option key={module.id} value={module.id}>
+                    {module.yearGroup} · {module.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
-          <button type="submit" className="btn-primary mt-2 py-4 text-base w-full shadow-glow">
-            Upload & Process
-          </button>
+          <label className="checkbox-row">
+            <input type="checkbox" name="isPublic" />
+            <span>Make this video public</span>
+          </label>
+
+          <div className="field">
+            <label htmlFor="file">MP4 file</label>
+            <input type="file" id="file" name="file" accept="video/mp4" required className="form-input" />
+            <p className="field-hint">Processing continues after the video record is created.</p>
+          </div>
+
+          <button type="submit" className="button">Upload and process</button>
         </form>
-      </div>
-    </div>
-  );
+      </section>
+    </main>
+  )
 }

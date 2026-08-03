@@ -1,24 +1,54 @@
-import { auth } from "@/auth";
-import { redirect } from "next/navigation";
-import prisma from "@/lib/prisma";
-import { v4 as uuidv4 } from "uuid";
+import type { Metadata } from "next"
+import { redirect } from "next/navigation"
+import { revalidatePath } from "next/cache"
+import { v4 as uuidv4 } from "uuid"
+import { auth } from "@/auth"
+import prisma from "@/lib/prisma"
+
+export const dynamic = "force-dynamic"
+
+export const metadata: Metadata = {
+  title: "Go Live | ESI Web TV",
+}
 
 export default async function NewLivePage() {
-  const session = await auth();
-  if (!session?.user || (session.user.role !== "TEACHER" && session.user.role !== "ADMIN")) {
-    redirect("/");
+  const session = await auth()
+  if (!session?.user) {
+    redirect("/login?callbackUrl=/live/new")
+  }
+  if (session.user.role !== "TEACHER" && session.user.role !== "ADMIN") {
+    redirect("/dashboard")
   }
 
+  const modules = await prisma.module.findMany({
+    orderBy: [{ yearGroup: "asc" }, { name: "asc" }],
+  })
+
   async function createLiveStream(formData: FormData) {
-    "use server";
-    const session = await auth();
+    "use server"
+
+    const session = await auth()
     if (!session?.user || (session.user.role !== "TEACHER" && session.user.role !== "ADMIN")) {
-      throw new Error("Unauthorized");
+      throw new Error("Unauthorized")
     }
 
-    const title = formData.get("title") as string;
-    const description = formData.get("description") as string;
-    
+    const title = String(formData.get("title") || "").trim()
+    const description = String(formData.get("description") || "").trim()
+    const moduleId = String(formData.get("moduleId") || "")
+    const isPublic = formData.get("visibility") === "public"
+
+    if (!title) {
+      throw new Error("Stream title is required")
+    }
+
+    const selectedModule = moduleId
+      ? await prisma.module.findUnique({ where: { id: moduleId }, select: { id: true } })
+      : null
+
+    if (moduleId && !selectedModule) {
+      throw new Error("Selected module was not found")
+    }
+
     const stream = await prisma.liveStream.create({
       data: {
         title,
@@ -26,53 +56,78 @@ export default async function NewLivePage() {
         streamKey: uuidv4(),
         hostId: session.user.id,
         isLive: true,
+        isPublic,
         startedAt: new Date(),
-      }
-    });
+        ...(selectedModule ? { moduleId: selectedModule.id } : {}),
+      },
+    })
 
-    redirect(`/live/${stream.streamKey}`);
+    revalidatePath("/")
+    revalidatePath("/live")
+    revalidatePath("/dashboard")
+    redirect(`/live/${stream.streamKey}`)
   }
 
   return (
-    <div className="container mt-12 mb-20 max-w-2xl mx-auto animate-fade-up">
-      <div className="card p-8 shadow-lg">
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-error-color/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-error-color text-2xl">🔴</span>
+    <main className="page-narrow">
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">Live broadcast</p>
+            <h1 className="section-title">Start a Live Broadcast</h1>
+            <p className="lead">Create a room for a class, module session, club event, or public announcement.</p>
           </div>
-          <h1 className="h2 mb-2">Start a Live Broadcast</h1>
-          <p className="text-text-secondary">Configure your stream details to go live instantly.</p>
         </div>
-        
-        <form action={createLiveStream} className="flex flex-col gap-6">
-          <div className="form-group">
-            <label htmlFor="title" className="form-label">Broadcast Title</label>
-            <input 
-              type="text" 
-              id="title" 
-              name="title" 
+
+        <form action={createLiveStream} className="form-stack">
+          <div className="field">
+            <label htmlFor="title">Broadcast title</label>
+            <input
+              type="text"
+              id="title"
+              name="title"
               required
               className="form-input"
-              placeholder="e.g. Introduction to Next.js"
+              placeholder="Algorithms revision session"
             />
           </div>
 
-          <div className="form-group">
-            <label htmlFor="description" className="form-label">Description (Optional)</label>
-            <textarea 
-              id="description" 
-              name="description" 
+          <div className="field">
+            <label htmlFor="description">Description</label>
+            <textarea
+              id="description"
+              name="description"
               rows={4}
-              className="form-input"
-              placeholder="What will you be teaching?"
+              className="form-textarea"
+              placeholder="Agenda, speaker, or audience"
             />
           </div>
 
-          <button type="submit" className="btn-primary mt-2 py-4 text-base w-full shadow-glow">
-            Go Live Now
-          </button>
+          <div className="grid grid-2">
+            <div className="field">
+              <label htmlFor="moduleId">Module</label>
+              <select id="moduleId" name="moduleId" className="form-select" defaultValue="">
+                <option value="">General</option>
+                {modules.map((module) => (
+                  <option key={module.id} value={module.id}>
+                    {module.yearGroup} · {module.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="field">
+              <label htmlFor="visibility">Visibility</label>
+              <select id="visibility" name="visibility" className="form-select" defaultValue="module">
+                <option value="module">ESI/module audience</option>
+                <option value="public">Public</option>
+              </select>
+            </div>
+          </div>
+
+          <button type="submit" className="button">Go live now</button>
         </form>
-      </div>
-    </div>
-  );
+      </section>
+    </main>
+  )
 }

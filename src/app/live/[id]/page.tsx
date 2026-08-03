@@ -1,57 +1,104 @@
-"use client";
+import Link from "next/link"
+import { notFound, redirect } from "next/navigation"
+import { revalidatePath } from "next/cache"
+import { auth } from "@/auth"
+import prisma from "@/lib/prisma"
+import { canManageUserContent, canViewScopedContent } from "@/lib/content-access"
+import LiveRoomClient from "@/components/LiveRoomClient"
 
-import { useEffect, useState } from "react";
-import {
-  LiveKitRoom,
-  VideoConference,
-  RoomAudioRenderer,
-} from "@livekit/components-react";
-import "@livekit/components-styles";
-import { useParams } from "next/navigation";
+export const dynamic = "force-dynamic"
 
-export default function LiveRoomPage() {
-  const { id: roomName } = useParams();
-  const [token, setToken] = useState("");
+type LiveRoomPageProps = {
+  params: Promise<{
+    id: string
+  }>
+}
 
-  useEffect(() => {
-    if (!roomName) return;
+export default async function LiveRoomPage({ params }: LiveRoomPageProps) {
+  const { id } = await params
+  const session = await auth()
+  const stream = await prisma.liveStream.findUnique({
+    where: { streamKey: id },
+    include: { host: true, module: true },
+  })
 
-    (async () => {
-      try {
-        const resp = await fetch(`/api/livekit/token?room=${roomName}`);
-        const data = await resp.json();
-        setToken(data.token);
-      } catch (e) {
-        console.error("Failed to fetch token", e);
-      }
-    })();
-  }, [roomName]);
+  if (!stream) {
+    notFound()
+  }
 
-  if (token === "") {
-    return <div className="flex justify-center p-12">Getting token...</div>;
+  if (!canViewScopedContent(stream, session?.user)) {
+    redirect(session?.user ? "/live" : `/login?callbackUrl=/live/${id}`)
+  }
+
+  const canManage = canManageUserContent(stream.hostId, session?.user)
+  const canPublish = canManage && stream.isLive
+
+  async function endLiveStream(formData: FormData) {
+    "use server"
+
+    const streamKey = String(formData.get("streamKey") || "")
+    const session = await auth()
+    const stream = await prisma.liveStream.findUnique({
+      where: { streamKey },
+      select: { id: true, hostId: true },
+    })
+
+    if (!stream || !canManageUserContent(stream.hostId, session?.user)) {
+      throw new Error("Unauthorized")
+    }
+
+    await prisma.liveStream.update({
+      where: { id: stream.id },
+      data: { isLive: false, endedAt: new Date() },
+    })
+
+    revalidatePath("/")
+    revalidatePath("/live")
+    revalidatePath("/dashboard")
+    redirect("/live")
   }
 
   return (
-    <div className="flex flex-col h-screen">
-      <header className="glass p-4 sticky top-0 z-50">
+    <div className="live-shell">
+      <header className="live-room-header">
         <div className="container">
-          <h1 className="h3 text-primary">Live Room: {roomName}</h1>
+          <div>
+            <p className="eyebrow">Live room</p>
+            <h1 className="section-title">{stream.title}</h1>
+            <div className="meta-row">
+              <span>{stream.host.name || "ESI"}</span>
+              {stream.module && <span>{stream.module.yearGroup} · {stream.module.name}</span>}
+              {stream.isPublic && <span className="badge badge-success">Public</span>}
+              {stream.isLive ? <span className="badge badge-live">Live</span> : <span className="badge">Ended</span>}
+            </div>
+          </div>
+
+          <div className="actions">
+            <Link href="/live" className="button-secondary">Back to live</Link>
+            {canManage && stream.isLive && (
+              <form action={endLiveStream}>
+                <input type="hidden" name="streamKey" value={stream.streamKey} />
+                <button type="submit" className="button-danger">End stream</button>
+              </form>
+            )}
+          </div>
         </div>
       </header>
-      
-      <main className="flex-1 bg-bg-primary" data-lk-theme="default">
-        <LiveKitRoom
-          video={true}
-          audio={true}
-          token={token}
-          serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL || "ws://localhost:7880"}
-          data-lk-theme="default"
-          style={{ height: '100dvh' }}
-        >
-          <VideoConference />
-          <RoomAudioRenderer />
-        </LiveKitRoom>
+
+      <main className="live-content">
+        <div className="live-stage" data-lk-theme="default">
+          {stream.isLive ? (
+            <LiveRoomClient roomName={stream.streamKey} canPublish={canPublish} />
+          ) : (
+            <div className="live-status">
+              <div>
+                <h2 className="section-title">This stream has ended</h2>
+                <p className="muted">Recordings will appear in Explore when they are published.</p>
+              </div>
+            </div>
+          )}
+        </div>
       </main>
     </div>
-  );
+  )
 }
