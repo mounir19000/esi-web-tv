@@ -11,8 +11,20 @@ import {
 import { createUploadSession } from "@/lib/upload-sessions"
 import { AudienceType } from "@prisma/client"
 import { NextResponse } from "next/server"
+import {
+  boundedLongText,
+  boundedText,
+  parseAudience,
+  parseVideoType,
+  stringInput,
+  validationLimits,
+  type FieldErrors,
+} from "@/lib/validation"
+import { checkRateLimit } from "@/lib/rate-limit"
 
 export const dynamic = "force-dynamic"
+const uploadInitRateLimitMax = 20
+const uploadInitRateLimitWindowMs = 60_000
 
 type CreateUploadRequest = {
   title?: unknown
@@ -33,12 +45,8 @@ function jsonError(error: string, status: number) {
   return NextResponse.json({ error }, { status })
 }
 
-function stringValue(value: unknown) {
-  return typeof value === "string" ? value.trim() : ""
-}
-
-function isAudienceType(value: string): value is AudienceType {
-  return Object.values(AudienceType).includes(value as AudienceType)
+function jsonValidationError(error: string, fieldErrors: FieldErrors, status = 400) {
+  return NextResponse.json({ error, fieldErrors }, { status })
 }
 
 export async function POST(request: Request) {
@@ -53,6 +61,14 @@ export async function POST(request: Request) {
     throw error
   }
 
+  const rateLimit = checkRateLimit(`upload-init:${user.id}`, uploadInitRateLimitMax, uploadInitRateLimitWindowMs)
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many upload attempts" },
+      { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } },
+    )
+  }
+
   let body: CreateUploadRequest
   try {
     body = (await request.json()) as CreateUploadRequest
@@ -60,47 +76,40 @@ export async function POST(request: Request) {
     return jsonError("Invalid JSON body", 400)
   }
 
-  const title = stringValue(body.title)
-  const description = stringValue(body.description)
-  const requestedType = stringValue(body.type) || "OTHER"
-  const moduleId = stringValue(body.moduleId)
+  const fieldErrors: FieldErrors = {}
+  const title = boundedText("title", body.title, validationLimits.titleMax, fieldErrors, true)
+  const description = boundedLongText("description", body.description, validationLimits.descriptionMax, fieldErrors)
+  const requestedType = parseVideoType(body.type || "OTHER", fieldErrors)
+  const moduleId = stringInput(body.moduleId)
   const fallbackAudience = body.isPublic === true ? AudienceType.PUBLIC : moduleId ? AudienceType.MODULE : AudienceType.ESI
-  const requestedAudience = stringValue(body.audience)
-  let audience: AudienceType = fallbackAudience
-  const fileName = stringValue(body.file?.name)
-  const expectedType = stringValue(body.file?.type)
+  const audience = parseAudience(body.audience, fieldErrors, fallbackAudience)
+  const fileName = stringInput(body.file?.name)
+  const expectedType = stringInput(body.file?.type)
   const expectedSize = Number(body.file?.size)
 
-  if (!title) {
-    return jsonError("Video title is required", 400)
-  }
-
-  if (!isAllowedUploadVideoType(requestedType)) {
+  if (requestedType && !isAllowedUploadVideoType(requestedType)) {
     return jsonError(`Video type must be one of: ${allowedUploadVideoTypes.join(", ")}`, 400)
   }
 
-  if (requestedAudience && !isAudienceType(requestedAudience)) {
-    return jsonError(`Audience must be one of: ${Object.values(AudienceType).join(", ")}`, 400)
-  }
-  if (requestedAudience) {
-    audience = requestedAudience as AudienceType
+  if (!audience || !requestedType || Object.keys(fieldErrors).length > 0) {
+    return jsonValidationError("Please fix the highlighted fields.", fieldErrors)
   }
 
   if (!Number.isSafeInteger(expectedSize) || expectedSize <= 0) {
-    return jsonError("Upload a valid MP4 file", 400)
+    return jsonValidationError("Upload a valid MP4 file", { file: "Upload a valid MP4 file" })
   }
 
   if (expectedSize > uploadMaxBytes) {
-    return jsonError("Video file is too large", 413)
+    return jsonValidationError("Video file is too large", { file: "Video file is too large" }, 413)
   }
 
   if (expectedType !== uploadContentType) {
-    return jsonError("Only MP4 files are supported", 400)
+    return jsonValidationError("Only MP4 files are supported", { file: "Only MP4 files are supported" })
   }
 
   let checksum: string | null
   try {
-    checksum = assertValidChecksum(stringValue(body.file?.checksumSha256))
+    checksum = assertValidChecksum(stringInput(body.file?.checksumSha256))
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : "Invalid checksum", 400)
   }
@@ -126,7 +135,7 @@ export async function POST(request: Request) {
     const uploadSession = await createUploadSession({
       ownerId: user.id,
       title,
-      description: description || null,
+      description,
       type: requestedType,
       audience,
       isPublic: audience === AudienceType.PUBLIC,

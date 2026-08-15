@@ -3,7 +3,15 @@ import { redirect } from "next/navigation"
 import { ProvisioningStatus } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/current-user"
-import { createUser, disableUser, updateUserAssignments, updateUserRole } from "./actions"
+import {
+  createUser,
+  disableUser,
+  enableUser,
+  resetUserPassword,
+  revokeUserSessionsAction,
+  updateUserAssignments,
+  updateUserRole,
+} from "./actions"
 
 export const dynamic = "force-dynamic"
 
@@ -143,17 +151,50 @@ export default async function UsersPage() {
                               <button type="submit" className="button-quiet">Update</button>
                             </form>
                             {user.isActive ? (
-                              <form
-                                action={async () => {
-                                  "use server"
-                                  await disableUser(user.id)
-                                }}
-                              >
+                              <form action={disableUser} className="inline-confirm-form">
+                                <input type="hidden" name="id" value={user.id} />
+                                <label className="checkbox-row">
+                                  <input type="checkbox" name="confirm" required />
+                                  <span>Confirm disable</span>
+                                </label>
                                 <button type="submit" className="button-quiet">Disable</button>
                               </form>
                             ) : (
-                              <span className="muted small">Disabled</span>
+                              <form
+                                action={async () => {
+                                  "use server"
+                                  await enableUser(user.id)
+                                }}
+                              >
+                                <button type="submit" className="button-quiet">Enable</button>
+                              </form>
                             )}
+                            <form action={revokeUserSessionsAction}>
+                              <input type="hidden" name="id" value={user.id} />
+                              <label className="checkbox-row">
+                                <input type="checkbox" name="confirm" required />
+                                <span>Confirm revoke</span>
+                              </label>
+                              <button type="submit" className="button-quiet">Revoke sessions</button>
+                            </form>
+                            <details className="assignment-details">
+                              <summary>Reset password</summary>
+                              <form action={resetUserPassword} className="form-stack assignment-form">
+                                <input type="hidden" name="id" value={user.id} />
+                                <div className="field">
+                                  <label htmlFor={`password-${user.id}`}>New password</label>
+                                  <input
+                                    id={`password-${user.id}`}
+                                    name="password"
+                                    type="password"
+                                    minLength={12}
+                                    required
+                                    className="form-input"
+                                  />
+                                </div>
+                                <button type="submit" className="button-quiet">Reset password</button>
+                              </form>
+                            </details>
                             <details className="assignment-details">
                               <summary>Assignments</summary>
                               <form action={updateUserAssignments} className="form-stack assignment-form">

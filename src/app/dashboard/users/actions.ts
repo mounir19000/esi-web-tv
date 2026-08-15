@@ -4,12 +4,32 @@ import prisma from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { revalidatePath } from "next/cache"
 import { AuditEventType, ProvisioningStatus, Role, type Prisma } from "@prisma/client"
-import { disableUserAccount, updateUserRoleAndRevokeSessions } from "@/lib/account-security"
+import { disableUserAccount, revokeUserSessions, updateUserRoleAndRevokeSessions } from "@/lib/account-security"
 import { recordAuditEvent } from "@/lib/audit"
 import { requireAdmin } from "@/lib/current-user"
+import { checkRateLimit } from "@/lib/rate-limit"
+import {
+  boundedText,
+  normalizeEsiEmail,
+  parseProvisioningStatus,
+  parseRole,
+  validatePassword,
+  validationLimits,
+  type FieldErrors,
+} from "@/lib/validation"
 
-const validRoles = new Set<string>(Object.values(Role))
-const validProvisioningStatuses = new Set<string>(Object.values(ProvisioningStatus))
+const adminMutationLimit = 60
+const adminMutationWindowMs = 60_000
+
+async function requireAdminMutation() {
+  const actor = await requireAdmin()
+  const result = checkRateLimit(`admin-mutation:${actor.id}`, adminMutationLimit, adminMutationWindowMs)
+  if (!result.allowed) {
+    throw new Error(`Too many admin changes. Try again in ${result.retryAfterSeconds} seconds.`)
+  }
+
+  return actor
+}
 
 function normalizeYearGroup(role: Role, yearGroup: string) {
   if (role !== Role.STUDENT) {
@@ -64,24 +84,19 @@ function formIds(formData: FormData, name: string) {
 }
 
 export async function createUser(formData: FormData) {
-  const actor = await requireAdmin()
+  const actor = await requireAdminMutation()
+  const errors: FieldErrors = {}
+  const name = boundedText("name", formData.get("name"), validationLimits.nameMax, errors, true)
+  const email = normalizeEsiEmail(formData.get("email"), errors)
+  const password = validatePassword(formData.get("password"), errors)
+  const parsedRole = parseRole(formData.get("role"), errors)
+  const yearGroup = boundedText("yearGroup", formData.get("yearGroup"), validationLimits.yearGroupMax, errors).toUpperCase()
 
-  const name = String(formData.get("name") || "").trim()
-  const email = String(formData.get("email") || "").trim().toLowerCase()
-  const password = String(formData.get("password") || "")
-  const role = String(formData.get("role") || "")
-  const yearGroup = String(formData.get("yearGroup") || "").trim().toUpperCase()
-
-  if (!name || !email || !password || !validRoles.has(role)) {
+  if (!parsedRole || Object.keys(errors).length > 0) {
     throw new Error("Missing required fields")
   }
 
-  const parsedRole = role as Role
   const normalizedYearGroup = normalizeYearGroup(parsedRole, yearGroup)
-
-  if (!email.endsWith("@esi.dz")) {
-    throw new Error("Only @esi.dz email addresses are allowed")
-  }
 
   const existingUser = await prisma.user.findUnique({ where: { email } })
   if (existingUser) {
@@ -117,18 +132,20 @@ export async function createUser(formData: FormData) {
 }
 
 export async function updateUserRole(formData: FormData) {
-  const actor = await requireAdmin()
+  const actor = await requireAdminMutation()
   const id = String(formData.get("id") || "")
-  const role = String(formData.get("role") || "")
-  const provisioningStatus = String(formData.get("provisioningStatus") || ProvisioningStatus.APPROVED)
-  const yearGroup = String(formData.get("yearGroup") || "").trim().toUpperCase()
+  const errors: FieldErrors = {}
+  const parsedRole = parseRole(formData.get("role"), errors)
+  const parsedProvisioningStatus = parseProvisioningStatus(
+    formData.get("provisioningStatus") || ProvisioningStatus.APPROVED,
+    errors,
+  )
+  const yearGroup = boundedText("yearGroup", formData.get("yearGroup"), validationLimits.yearGroupMax, errors).toUpperCase()
 
-  if (!id || !validRoles.has(role) || !validProvisioningStatuses.has(provisioningStatus)) {
+  if (!id || !parsedRole || !parsedProvisioningStatus || Object.keys(errors).length > 0) {
     throw new Error("Missing required fields")
   }
 
-  const parsedRole = role as Role
-  const parsedProvisioningStatus = provisioningStatus as ProvisioningStatus
   const normalizedYearGroup = normalizeYearGroup(parsedRole, yearGroup)
 
   if (actor.id === id) {
@@ -146,7 +163,7 @@ export async function updateUserRole(formData: FormData) {
 }
 
 export async function updateUserAssignments(formData: FormData) {
-  await requireAdmin()
+  await requireAdminMutation()
   const userId = String(formData.get("id") || "")
   const cohortIds = formIds(formData, "cohortId")
   const studentModuleIds = formIds(formData, "studentModuleId")
@@ -193,13 +210,114 @@ export async function updateUserAssignments(formData: FormData) {
   revalidatePath("/dashboard/users")
 }
 
-export async function disableUser(id: string) {
-  const actor = await requireAdmin()
+function requireConfirmation(formData: FormData) {
+  if (formData.get("confirm") !== "on") {
+    throw new Error("Confirm this action before submitting.")
+  }
+}
+
+export async function disableUser(formData: FormData) {
+  const actor = await requireAdminMutation()
+  const id = String(formData.get("id") || "")
+  requireConfirmation(formData)
 
   if (actor.id === id) {
     throw new Error("Admins cannot disable their own account.")
   }
 
   await disableUserAccount(id, actor.id)
+  revalidatePath("/dashboard/users")
+}
+
+export async function enableUser(id: string) {
+  const actor = await requireAdminMutation()
+
+  if (actor.id === id) {
+    throw new Error("Admins cannot enable their own account.")
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const user = await tx.user.update({
+      where: { id },
+      data: {
+        isActive: true,
+        disabledAt: null,
+        sessionVersion: { increment: 1 },
+      },
+      select: { email: true, role: true },
+    })
+
+    await tx.auditEvent.create({
+      data: {
+        type: AuditEventType.USER_DISABLE,
+        actorId: actor.id,
+        subjectId: id,
+        metadata: {
+          enabled: true,
+          email: user.email,
+          role: user.role,
+        },
+      },
+    })
+  })
+  revalidatePath("/dashboard/users")
+}
+
+export async function resetUserPassword(formData: FormData) {
+  const actor = await requireAdminMutation()
+  const id = String(formData.get("id") || "")
+  const errors: FieldErrors = {}
+  const password = validatePassword(formData.get("password"), errors)
+
+  if (!id || Object.keys(errors).length > 0) {
+    throw new Error(errors.password || "Missing required fields")
+  }
+
+  if (actor.id === id) {
+    throw new Error("Admins cannot reset their own password here.")
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10)
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id },
+      data: {
+        password: hashedPassword,
+        sessionVersion: { increment: 1 },
+      },
+    })
+    await tx.session.deleteMany({ where: { userId: id } })
+    await tx.auditEvent.create({
+      data: {
+        type: AuditEventType.PASSWORD_RESET,
+        actorId: actor.id,
+        subjectId: id,
+      },
+    })
+    await tx.auditEvent.create({
+      data: {
+        type: AuditEventType.SESSION_REVOKE,
+        actorId: actor.id,
+        subjectId: id,
+        metadata: { reason: AuditEventType.PASSWORD_RESET },
+      },
+    })
+  })
+  revalidatePath("/dashboard/users")
+}
+
+export async function revokeUserSessionsAction(formData: FormData) {
+  const actor = await requireAdminMutation()
+  const id = String(formData.get("id") || "")
+  requireConfirmation(formData)
+  if (!id) {
+    throw new Error("Missing user")
+  }
+
+  if (actor.id === id) {
+    throw new Error("Admins cannot revoke their own sessions here.")
+  }
+
+  await revokeUserSessions(id, actor.id, AuditEventType.ROLE_CHANGE)
   revalidatePath("/dashboard/users")
 }
