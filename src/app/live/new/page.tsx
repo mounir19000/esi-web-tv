@@ -8,6 +8,7 @@ import { canPublishToAudience, validateAudienceSelection } from "@/lib/content-a
 import { getCurrentUser, requireEducator } from "@/lib/current-user"
 import { appConfig } from "@/lib/env"
 import { ensureLiveStreamRoom } from "@/lib/livekit-lifecycle"
+import { boundedLongText, boundedText, validationLimits, type FieldErrors } from "@/lib/validation"
 
 export const dynamic = "force-dynamic"
 
@@ -42,16 +43,17 @@ export default async function NewLivePage() {
 
     const user = await requireEducator()
 
-    const title = String(formData.get("title") || "").trim()
-    const description = String(formData.get("description") || "").trim()
+    const errors: FieldErrors = {}
+    const title = boundedText("title", formData.get("title"), validationLimits.titleMax, errors, true)
+    const description = boundedLongText("description", formData.get("description"), validationLimits.descriptionMax, errors)
     const moduleId = String(formData.get("moduleId") || "")
     const audienceValue = String(formData.get("audience") || "")
     const recordingPolicy = appConfig.livekit.recordingEnabled && formData.get("recordingPolicy") === "auto"
       ? RecordingPolicy.AUTO
       : RecordingPolicy.NONE
 
-    if (!title) {
-      throw new Error("Stream title is required")
+    if (Object.keys(errors).length > 0) {
+      throw new Error(Object.values(errors)[0])
     }
 
     if (!isAudienceType(audienceValue)) {

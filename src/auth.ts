@@ -8,9 +8,12 @@ import CredentialsProvider from "next-auth/providers/credentials"
 import { AuditEventType, ProvisioningStatus } from "@prisma/client"
 import { recordAuditEvent } from "./lib/audit"
 import { appConfig } from "./lib/env"
+import { checkRateLimit } from "./lib/rate-limit"
 
 const ESI_EMAIL_DOMAIN = "@esi.dz"
 const roles = ["GUEST", "STUDENT", "TEACHER", "ADMIN"] as const
+const credentialRateLimitWindowMs = 15 * 60 * 1000
+const credentialRateLimitMax = 10
 
 function isRole(value: unknown): value is (typeof roles)[number] {
   return typeof value === "string" && roles.includes(value as (typeof roles)[number])
@@ -32,6 +35,15 @@ const providers: Provider[] = [
       const password = String(credentials?.password || "")
 
       if (!email || !password || !email.endsWith(ESI_EMAIL_DOMAIN)) {
+        return null
+      }
+
+      const rateLimit = checkRateLimit(
+        `credentials:${email}`,
+        credentialRateLimitMax,
+        credentialRateLimitWindowMs,
+      )
+      if (!rateLimit.allowed) {
         return null
       }
 

@@ -41,13 +41,17 @@ function formatBytes(bytes: number) {
 }
 
 async function parseApiResponse<T>(response: Response): Promise<T> {
-  const payload = (await response.json().catch(() => null)) as { error?: string } | T | null
+  const payload = (await response.json().catch(() => null)) as { error?: string; fieldErrors?: Record<string, string> } | T | null
   if (!response.ok) {
     const errorMessage =
       payload && typeof payload === "object" && "error" in payload && typeof payload.error === "string"
         ? payload.error
         : "Request failed"
-    throw new Error(errorMessage)
+    const error = new Error(errorMessage) as Error & { fieldErrors?: Record<string, string> }
+    if (payload && typeof payload === "object" && "fieldErrors" in payload) {
+      error.fieldErrors = payload.fieldErrors
+    }
+    throw error
   }
 
   return payload as T
@@ -57,6 +61,7 @@ export function UploadVideoForm({ modules }: { modules: ModuleOption[] }) {
   const router = useRouter()
   const [phase, setPhase] = useState<UploadPhase>("idle")
   const [error, setError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [progress, setProgress] = useState(0)
   const activeSessionIdRef = useRef<string | null>(null)
   const partProgressRef = useRef(new Map<number, number>())
@@ -196,6 +201,7 @@ export function UploadVideoForm({ modules }: { modules: ModuleOption[] }) {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
+    setFieldErrors({})
     setProgress(0)
     partProgressRef.current.clear()
 
@@ -233,13 +239,27 @@ export function UploadVideoForm({ modules }: { modules: ModuleOption[] }) {
       router.refresh()
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : "Upload failed")
+      if (uploadError instanceof Error && "fieldErrors" in uploadError) {
+        setFieldErrors((uploadError as Error & { fieldErrors?: Record<string, string> }).fieldErrors ?? {})
+      }
       setPhase("idle")
     }
   }
 
   return (
     <form onSubmit={handleSubmit} className="form-stack">
-      {error && <div className="alert">{error}</div>}
+      {error && (
+        <div className="alert" role="alert">
+          <p>{error}</p>
+          {Object.keys(fieldErrors).length > 0 && (
+            <ul>
+              {Object.entries(fieldErrors).map(([field, message]) => (
+                <li key={field}>{message}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className="field">
         <label htmlFor="title">Video title</label>

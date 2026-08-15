@@ -599,6 +599,11 @@ video {
   color: var(--muted);
 }
 
+.inline-confirm-form {
+  display: grid;
+  gap: 8px;
+}
+
 .assignment-details summary {
   cursor: pointer;
   font-weight: 800;
@@ -634,6 +639,14 @@ video {
   display: grid;
   grid-template-columns: minmax(120px, 0.6fr) minmax(0, 1.4fr);
   gap: 12px;
+}
+
+.management-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.7fr);
+  gap: 16px;
+  align-items: start;
+  margin-top: 18px;
 }
 
 .split-layout {
@@ -871,6 +884,7 @@ video {
   .grid-3,
   .grid-4,
   .caption-form-grid,
+  .management-actions,
   .stat-grid {
     grid-template-columns: 1fr;
   }
