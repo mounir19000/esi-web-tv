@@ -1,7 +1,7 @@
 import { randomUUID, createHash } from "node:crypto"
 import { UploadSessionState, type UploadSession, type VideoType } from "@prisma/client"
 import prisma from "@/lib/prisma"
-import { initBuckets, minioClient, VIDEO_BUCKET_NAME } from "@/lib/minio"
+import { getMinioClient, initBuckets, VIDEO_BUCKET_NAME } from "@/lib/minio"
 import { MEDIA_OBJECT_PREFIXES } from "@/lib/media"
 import { enqueueVideoProcessing } from "@/lib/media-queue"
 import {
@@ -15,7 +15,8 @@ import {
   type UploadedMultipartPart,
 } from "@/lib/upload-policy"
 
-type MultipartCapableMinioClient = typeof minioClient & {
+type MinioClient = ReturnType<typeof getMinioClient>
+type MultipartCapableMinioClient = MinioClient & {
   initiateNewMultipartUpload(bucketName: string, objectName: string, headers: Record<string, string>): Promise<string>
   abortMultipartUpload(bucketName: string, objectName: string, uploadId: string): Promise<void>
   completeMultipartUpload(
@@ -27,7 +28,10 @@ type MultipartCapableMinioClient = typeof minioClient & {
   listParts(bucketName: string, objectName: string, uploadId: string): Promise<UploadedMultipartPart[]>
 }
 
-const multipartClient = minioClient as MultipartCapableMinioClient
+function getMultipartClient() {
+  return getMinioClient() as MultipartCapableMinioClient
+}
+
 const uploadUrlTtlSeconds = 15 * 60
 const activeUploadStates: UploadSessionState[] = [UploadSessionState.INITIATED, UploadSessionState.UPLOADING]
 
@@ -78,7 +82,7 @@ async function signUploadParts(session: UploadSession, partNumbers?: number[]): 
   return Promise.all(
     parts.map(async (part) => ({
       ...part,
-      url: await multipartClient.presignedUrl("PUT", VIDEO_BUCKET_NAME, session.objectKey, uploadUrlTtlSeconds, {
+      url: await getMultipartClient().presignedUrl("PUT", VIDEO_BUCKET_NAME, session.objectKey, uploadUrlTtlSeconds, {
         partNumber: String(part.partNumber),
         uploadId: session.multipartUploadId,
       }),
@@ -98,7 +102,7 @@ export async function expireStaleUploadSessions(ownerId?: string) {
 
   await Promise.allSettled(
     expiredSessions.map(async (session) => {
-      await multipartClient.abortMultipartUpload(VIDEO_BUCKET_NAME, session.objectKey, session.multipartUploadId)
+      await getMultipartClient().abortMultipartUpload(VIDEO_BUCKET_NAME, session.objectKey, session.multipartUploadId)
       await prisma.uploadSession.update({
         where: { id: session.id },
         data: { state: UploadSessionState.EXPIRED },
@@ -132,7 +136,7 @@ export async function createUploadSession(input: CreateUploadSessionInput) {
   }
 
   const objectKey = randomStagingObjectKey(input.ownerId)
-  const uploadId = await multipartClient.initiateNewMultipartUpload(VIDEO_BUCKET_NAME, objectKey, {
+  const uploadId = await getMultipartClient().initiateNewMultipartUpload(VIDEO_BUCKET_NAME, objectKey, {
     "Content-Type": input.expectedType,
   })
 
@@ -187,7 +191,7 @@ export async function refreshUploadPartUrls(sessionId: string, ownerId: string, 
 
 async function streamObjectToHash(objectKey: string) {
   const hash = createHash("sha256")
-  const objectStream = await minioClient.getObject(VIDEO_BUCKET_NAME, objectKey)
+  const objectStream = await getMinioClient().getObject(VIDEO_BUCKET_NAME, objectKey)
 
   for await (const chunk of objectStream) {
     hash.update(chunk)
@@ -204,21 +208,21 @@ export async function completeUploadSession(sessionId: string, ownerId: string) 
 
   assertActiveUploadSession(session)
 
-  const listedParts = await multipartClient.listParts(VIDEO_BUCKET_NAME, session.objectKey, session.multipartUploadId)
+  const listedParts = await getMultipartClient().listParts(VIDEO_BUCKET_NAME, session.objectKey, session.multipartUploadId)
   const completionParts = validateUploadedParts(
     listedParts,
     Number(session.expectedSize),
     session.expectedPartSize,
   )
 
-  await multipartClient.completeMultipartUpload(
+  await getMultipartClient().completeMultipartUpload(
     VIDEO_BUCKET_NAME,
     session.objectKey,
     session.multipartUploadId,
     completionParts,
   )
 
-  const objectInfo = await minioClient.statObject(VIDEO_BUCKET_NAME, session.objectKey)
+  const objectInfo = await getMinioClient().statObject(VIDEO_BUCKET_NAME, session.objectKey)
   if (objectInfo.size !== Number(session.expectedSize)) {
     throw new Error("Uploaded object size does not match the upload session")
   }
@@ -287,7 +291,7 @@ export async function abortUploadSession(sessionId: string, ownerId: string) {
   }
 
   if (activeUploadStates.includes(session.state)) {
-    await multipartClient.abortMultipartUpload(VIDEO_BUCKET_NAME, session.objectKey, session.multipartUploadId)
+    await getMultipartClient().abortMultipartUpload(VIDEO_BUCKET_NAME, session.objectKey, session.multipartUploadId)
   }
 
   return prisma.uploadSession.update({

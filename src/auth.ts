@@ -7,6 +7,7 @@ import bcrypt from "bcryptjs"
 import CredentialsProvider from "next-auth/providers/credentials"
 import { AuditEventType } from "@prisma/client"
 import { recordAuditEvent } from "./lib/audit"
+import { appConfig } from "./lib/env"
 
 const ESI_EMAIL_DOMAIN = "@esi.dz"
 const roles = ["GUEST", "STUDENT", "TEACHER", "ADMIN"] as const
@@ -68,17 +69,18 @@ const providers: Provider[] = [
   }),
 ]
 
-if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+if (appConfig.auth.google.enabled) {
   providers.push(
     Google({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      clientId: appConfig.auth.google.clientId,
+      clientSecret: appConfig.auth.google.clientSecret,
     }),
   )
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(prisma),
+  secret: appConfig.auth.secret,
   providers,
   pages: {
     signIn: "/login",

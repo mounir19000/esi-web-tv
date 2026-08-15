@@ -1,3 +1,5 @@
+import { appConfig, ConfigurationError, loadAppConfig, type RuntimeEnv } from "@/lib/env"
+
 export const LIVEKIT_MINIMUM_SECRET_LENGTH = 32
 
 export class LiveKitConfigurationError extends Error {
@@ -7,29 +9,18 @@ export class LiveKitConfigurationError extends Error {
   }
 }
 
-type LiveKitCredentialEnv = {
-  [key: string]: string | undefined
-  LIVEKIT_API_KEY?: string | undefined
-  LIVEKIT_API_SECRET?: string | undefined
-}
+export function getLiveKitCredentials(env?: RuntimeEnv) {
+  try {
+    const livekit = env ? loadAppConfig(env).livekit : appConfig.livekit
+    return {
+      apiKey: livekit.apiKey,
+      apiSecret: livekit.apiSecret,
+    }
+  } catch (error) {
+    if (error instanceof ConfigurationError) {
+      throw new LiveKitConfigurationError(error.message)
+    }
 
-export function getLiveKitCredentials(env: LiveKitCredentialEnv = process.env) {
-  const apiKey = env.LIVEKIT_API_KEY?.trim()
-  const apiSecret = env.LIVEKIT_API_SECRET?.trim()
-
-  if (!apiKey) {
-    throw new LiveKitConfigurationError("LIVEKIT_API_KEY is required")
+    throw error
   }
-
-  if (!apiSecret) {
-    throw new LiveKitConfigurationError("LIVEKIT_API_SECRET is required")
-  }
-
-  if (apiSecret.length < LIVEKIT_MINIMUM_SECRET_LENGTH) {
-    throw new LiveKitConfigurationError(
-      `LIVEKIT_API_SECRET must be at least ${LIVEKIT_MINIMUM_SECRET_LENGTH} characters`,
-    )
-  }
-
-  return { apiKey, apiSecret }
 }

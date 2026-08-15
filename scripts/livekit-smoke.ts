@@ -4,6 +4,7 @@ import "dotenv/config"
 import { AccessToken } from "livekit-server-sdk"
 import { chromium } from "@playwright/test"
 import { getLiveKitCredentials } from "../src/lib/livekit-config"
+import { appConfig } from "../src/lib/env"
 
 declare global {
   interface Window {
@@ -12,7 +13,7 @@ declare global {
 }
 
 function getLiveKitUrl() {
-  return process.env.NEXT_PUBLIC_LIVEKIT_URL || process.env.LIVEKIT_URL || "ws://localhost:7880"
+  return appConfig.livekit.publicUrl
 }
 
 function getLiveKitHttpOrigin(serverUrl: string) {

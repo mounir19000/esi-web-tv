@@ -3,6 +3,7 @@ import Image from "next/image"
 import { redirect } from "next/navigation"
 import LoginForm from "@/components/LoginForm"
 import { getCurrentUser } from "@/lib/current-user"
+import { appConfig } from "@/lib/env"
 
 export const metadata: Metadata = {
   title: "Sign in | ESI Web TV",
@@ -13,8 +14,6 @@ export default async function LoginPage() {
   if (user) {
     redirect("/dashboard")
   }
-
-  const googleEnabled = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET)
 
   return (
     <div className="page-narrow">
@@ -27,7 +26,7 @@ export default async function LoginPage() {
           </div>
           <Image src="/logo_esi_seule.png" alt="" width={58} height={58} />
         </div>
-        <LoginForm googleEnabled={googleEnabled} />
+        <LoginForm googleEnabled={appConfig.auth.google.enabled} />
       </section>
     </div>
   )

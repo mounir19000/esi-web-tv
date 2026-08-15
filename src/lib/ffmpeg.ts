@@ -1,10 +1,11 @@
 import ffmpeg from 'fluent-ffmpeg'
-import { initBuckets, minioClient, VIDEO_BUCKET_NAME } from './minio'
+import { getMinioClient, initBuckets, VIDEO_BUCKET_NAME } from './minio'
 import fs from 'fs'
 import path from 'path'
 
 export const transcodeAndUpload = async (inputFilePath: string, videoId: string) => {
   await initBuckets()
+  const minioClient = getMinioClient()
   let thumbnailUrl: string | null = null
   const workDir = path.dirname(inputFilePath)
 

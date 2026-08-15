@@ -1,31 +1,55 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 import { getLiveKitCredentials, LiveKitConfigurationError } from "../../src/lib/livekit-config"
+import type { RuntimeEnv } from "../../src/lib/env"
+
+function baseEnv(overrides: RuntimeEnv = {}): RuntimeEnv {
+  return {
+    APP_ENV: "test",
+    ALLOW_DEMO_SEED: "false",
+    DATABASE_URL: "postgresql://test_user:test_password@localhost:5433/esitvdb?schema=public",
+    AUTH_SECRET: "test-auth-secret-with-at-least-32-characters",
+    NEXTAUTH_URL: "http://localhost:3000",
+    LIVEKIT_API_KEY: "test-livekit-key",
+    LIVEKIT_API_SECRET: "test-livekit-secret-with-at-least-32-chars",
+    NEXT_PUBLIC_LIVEKIT_URL: "ws://localhost:7880",
+    MINIO_ENDPOINT: "localhost",
+    MINIO_PORT: "9000",
+    MINIO_USE_SSL: "false",
+    MINIO_ACCESS_KEY: "test-minio-app",
+    MINIO_SECRET_KEY: "test-minio-secret",
+    MINIO_VIDEO_BUCKET: "esitv-videos",
+    REDIS_URL: "redis://localhost:6379",
+    MEDIA_WORKER_VERSION: "test-suite",
+    MEDIA_WORKER_CONCURRENCY: "1",
+    ...overrides,
+  }
+}
 
 describe("LiveKit configuration", () => {
   it("returns configured credentials", () => {
-    const credentials = getLiveKitCredentials({
-      LIVEKIT_API_KEY: "devkey",
-      LIVEKIT_API_SECRET: "dev-secret-key-change-me-32-chars-minimum",
-    })
+    const credentials = getLiveKitCredentials(baseEnv())
 
     assert.deepEqual(credentials, {
-      apiKey: "devkey",
-      apiSecret: "dev-secret-key-change-me-32-chars-minimum",
+      apiKey: "test-livekit-key",
+      apiSecret: "test-livekit-secret-with-at-least-32-chars",
     })
   })
 
   it("requires both credential values", () => {
     assert.throws(
-      () => getLiveKitCredentials({ LIVEKIT_API_SECRET: "dev-secret-key-change-me-32-chars-minimum" }),
+      () => getLiveKitCredentials(baseEnv({ LIVEKIT_API_KEY: undefined })),
       LiveKitConfigurationError,
     )
-    assert.throws(() => getLiveKitCredentials({ LIVEKIT_API_KEY: "devkey" }), LiveKitConfigurationError)
+    assert.throws(
+      () => getLiveKitCredentials(baseEnv({ LIVEKIT_API_SECRET: undefined })),
+      LiveKitConfigurationError,
+    )
   })
 
   it("rejects secrets LiveKit will not accept", () => {
     assert.throws(
-      () => getLiveKitCredentials({ LIVEKIT_API_KEY: "devkey", LIVEKIT_API_SECRET: "secret" }),
+      () => getLiveKitCredentials(baseEnv({ LIVEKIT_API_SECRET: "short" })),
       /at least 32 characters/,
     )
   })
