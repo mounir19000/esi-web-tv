@@ -1,7 +1,7 @@
 import type { Prisma, Role } from "@prisma/client"
 import type { Session } from "next-auth"
 
-type Viewer = Session["user"] | undefined | null
+export type Viewer = Session["user"] | undefined | null
 
 type ModuleScope = {
   yearGroup: string

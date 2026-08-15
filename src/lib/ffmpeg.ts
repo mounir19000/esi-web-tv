@@ -28,7 +28,12 @@ export const transcodeAndUpload = async (inputFilePath: string, videoId: string)
         .on('end', async () => {
           try {
             // Upload to MinIO
-            await minioClient.fPutObject(VIDEO_BUCKET_NAME, `videos/${outputFileName}`, outputFilePath)
+            await minioClient.fPutObject(
+              VIDEO_BUCKET_NAME,
+              `videos/${outputFileName}`,
+              outputFilePath,
+              { 'Content-Type': 'video/mp4' },
+            )
             // Clean up tmp file
             fs.unlinkSync(outputFilePath)
             resolve(true)
@@ -61,7 +66,12 @@ export const transcodeAndUpload = async (inputFilePath: string, videoId: string)
             resolve(true)
             return
           }
-          await minioClient.fPutObject(VIDEO_BUCKET_NAME, `thumbnails/${thumbName}`, thumbPath)
+          await minioClient.fPutObject(
+            VIDEO_BUCKET_NAME,
+            `thumbnails/${thumbName}`,
+            thumbPath,
+            { 'Content-Type': 'image/jpeg' },
+          )
           thumbnailUrl = `thumbnails/${thumbName}`
           fs.unlinkSync(thumbPath)
           resolve(true)

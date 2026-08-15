@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import Link from "next/link"
-import { getMediaUrl } from "@/lib/media"
+import { getVideoThumbnailUrl } from "@/lib/media"
 
 type VideoCardData = {
   id: string
@@ -52,7 +52,7 @@ function formatDate(date: Date | null) {
 }
 
 export function VideoCard({ video }: { video: VideoCardData }) {
-  const thumbnailUrl = getMediaUrl(video.thumbnailUrl)
+  const thumbnailUrl = getVideoThumbnailUrl(video.id, video.thumbnailUrl)
 
   return (
     <Link href={`/video/${video.id}`} className="video-card">

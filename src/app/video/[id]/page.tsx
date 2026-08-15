@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation"
 import { auth } from "@/auth"
 import prisma from "@/lib/prisma"
 import { canViewScopedContent, visibleVideoWhere } from "@/lib/content-access"
-import { getMediaUrl } from "@/lib/media"
+import { getVideoPlaybackUrl, getVideoThumbnailUrl } from "@/lib/media"
 import { VideoCard } from "@/components/ContentCards"
 
 export const dynamic = "force-dynamic"
@@ -38,8 +38,8 @@ export default async function VideoPage({ params }: VideoPageProps) {
     redirect(session?.user ? "/explore" : `/login?callbackUrl=/video/${id}`)
   }
 
-  const mediaUrl = getMediaUrl(video.url)
-  const posterUrl = getMediaUrl(video.thumbnailUrl)
+  const mediaUrl = getVideoPlaybackUrl(video.id, video.url)
+  const posterUrl = getVideoThumbnailUrl(video.id, video.thumbnailUrl)
   const relatedWhere = video.moduleId
     ? { AND: [visibleVideoWhere(session?.user), { id: { not: video.id } }, { moduleId: video.moduleId }] }
     : { AND: [visibleVideoWhere(session?.user), { id: { not: video.id } }] }
