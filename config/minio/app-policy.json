@@ -1,0 +1,33 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetBucketLocation",
+        "s3:ListBucket",
+        "s3:ListBucketMultipartUploads"
+      ],
+      "Resource": [
+        "arn:aws:s3:::__MINIO_VIDEO_BUCKET__"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:AbortMultipartUpload",
+        "s3:ListMultipartUploadParts"
+      ],
+      "Resource": [
+        "arn:aws:s3:::__MINIO_VIDEO_BUCKET__/staging/*",
+        "arn:aws:s3:::__MINIO_VIDEO_BUCKET__/videos/*",
+        "arn:aws:s3:::__MINIO_VIDEO_BUCKET__/thumbnails/*",
+        "arn:aws:s3:::__MINIO_VIDEO_BUCKET__/captions/*",
+        "arn:aws:s3:::__MINIO_VIDEO_BUCKET__/recordings/*"
+      ]
+    }
+  ]
+}
