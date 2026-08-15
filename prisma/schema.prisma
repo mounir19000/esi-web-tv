@@ -31,6 +31,15 @@ enum UploadSessionState {
   EXPIRED
 }
 
+enum VideoStatus {
+  UPLOADING
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+  DELETING
+}
+
 model User {
   id            String    @id @default(cuid())
   name          String?
@@ -58,20 +67,33 @@ model Module {
 }
 
 model Video {
-  id           String    @id @default(cuid())
-  title        String
-  description  String?
-  type         VideoType
-  isPublic     Boolean   @default(false)
-  url          String // MinIO URL or path
-  thumbnailUrl String?
-  createdAt    DateTime  @default(now())
+  id                      String      @id @default(cuid())
+  title                   String
+  description             String?
+  type                    VideoType
+  isPublic                Boolean     @default(false)
+  status                  VideoStatus @default(READY)
+  url                     String // MinIO URL or path
+  thumbnailUrl            String?
+  sourceKey               String?
+  processingVersion       Int         @default(1)
+  processingAttempts      Int         @default(0)
+  processingErrorCode     String?
+  processingErrorMessage  String?
+  queuedAt                DateTime?
+  processingStartedAt     DateTime?
+  processingCompletedAt   DateTime?
+  processingWorkerVersion String?
+  createdAt               DateTime    @default(now())
 
   uploaderId String
   uploader   User   @relation("Uploader", fields: [uploaderId], references: [id])
 
   moduleId String?
   module   Module? @relation(fields: [moduleId], references: [id])
+
+  @@index([status, createdAt])
+  @@index([uploaderId, status])
 }
 
 model UploadSession {

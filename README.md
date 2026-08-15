@@ -58,6 +58,10 @@ MINIO_USE_SSL="false"
 MINIO_ROOT_USER="minioadmin"
 MINIO_ROOT_PASSWORD="minioadmin"
 MEDIA_SIGNED_URL_TTL_SECONDS="60"
+
+REDIS_URL="redis://localhost:6379"
+MEDIA_WORKER_VERSION="local-dev"
+MEDIA_WORKER_CONCURRENCY="1"
 ```
 
 Prepare the database and seed demo users:
@@ -100,8 +104,10 @@ Only `@esi.dz` email addresses are accepted.
 
 ```bash
 npm run dev
+npm run worker:media
 npm run build
 npm run lint
+npm run test:unit
 npx playwright test
 npx prisma db seed
 ```
@@ -116,18 +122,29 @@ The included Docker Compose file starts:
 | PostgreSQL | `localhost:5433` |
 | MinIO API | `http://localhost:9000` |
 | MinIO Console | `http://localhost:9001` |
+| Redis | `localhost:6379` |
+| Media worker | `npm run worker:media` |
 | LiveKit | `ws://localhost:7880` |
 
 ## Video Upload Notes
 
-Uploaded MP4 files use server-created multipart upload sessions. The browser uploads chunks directly to private MinIO staging with short-lived signed URLs, then the app finalizes the object and starts FFmpeg processing. Playback and thumbnails are served through app authorization endpoints that issue short-lived signed URLs. For production, move the processing work to a background queue such as BullMQ, a worker service, or a job runner on the VM.
+Uploaded MP4 files use server-created multipart upload sessions. The browser uploads chunks directly to private MinIO staging with short-lived signed URLs, then the app finalizes the object and enqueues durable BullMQ media processing in Redis. A standalone media worker downloads staging objects, validates them with FFprobe, runs FFmpeg, publishes ready renditions, and updates video lifecycle state.
+
+Only `READY` videos appear in public and scoped library listings. Owners and admins can open processing or failed uploads directly and retry failed processing from the video page.
 
 The MinIO API endpoint must be reachable from the browser and allow CORS requests from the Next.js origin for `PUT`, `POST`, `DELETE`, `GET`, and `HEAD`. Expose the `ETag` header if you add client-side part verification.
 
-Make sure FFmpeg is installed on the host that runs the Next.js server:
+Run the media worker next to Redis, PostgreSQL, and MinIO while testing uploads locally:
+
+```bash
+npm run worker:media
+```
+
+Make sure FFmpeg and FFprobe are installed on the host that runs the media worker:
 
 ```bash
 ffmpeg -version
+ffprobe -version
 ```
 
 ## Testing

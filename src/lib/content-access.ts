@@ -1,4 +1,4 @@
-import type { Prisma, Role } from "@prisma/client"
+import { VideoStatus, type Prisma, type Role } from "@prisma/client"
 import type { Session } from "next-auth"
 
 export type Viewer = Session["user"] | undefined | null
@@ -55,17 +55,22 @@ export function canViewScopedContent(content: ScopedContent, viewer: Viewer) {
 }
 
 export function visibleVideoWhere(viewer: Viewer): Prisma.VideoWhereInput {
+  const readyVideoWhere: Prisma.VideoWhereInput = { status: VideoStatus.READY }
+
   if (viewer?.role === "ADMIN" || viewer?.role === "TEACHER") {
-    return {}
+    return readyVideoWhere
   }
 
   if (viewer?.role === "STUDENT" && viewer.yearGroup) {
     return {
-      OR: [{ isPublic: true }, { module: { yearGroup: viewer.yearGroup } }],
+      AND: [
+        readyVideoWhere,
+        { OR: [{ isPublic: true }, { module: { yearGroup: viewer.yearGroup } }] },
+      ],
     }
   }
 
-  return { isPublic: true }
+  return { AND: [readyVideoWhere, { isPublic: true }] }
 }
 
 export function visibleLiveStreamWhere(viewer: Viewer): Prisma.LiveStreamWhereInput {

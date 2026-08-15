@@ -2,6 +2,7 @@ import { auth } from "@/auth"
 import { minioClient, VIDEO_BUCKET_NAME } from "@/lib/minio"
 import { isVideoMediaAsset, resolveVideoAssetObjectKey } from "@/lib/media"
 import { authorizeVideoAccess } from "@/lib/video-authorization"
+import { VideoStatus } from "@prisma/client"
 import { NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
@@ -51,6 +52,10 @@ export async function GET(_request: Request, context: { params: Promise<MediaRou
 
   if (access.status === "forbidden") {
     return jsonError("Forbidden", 403)
+  }
+
+  if (access.video.status !== VideoStatus.READY) {
+    return jsonError("Media asset not found", 404)
   }
 
   const objectKey = resolveVideoAssetObjectKey(access.video, asset)

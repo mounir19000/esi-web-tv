@@ -1,15 +1,9 @@
 import { randomUUID, createHash } from "node:crypto"
-import { createWriteStream } from "node:fs"
-import fs from "node:fs/promises"
-import os from "node:os"
-import path from "node:path"
-import { pipeline } from "node:stream/promises"
-import type { Readable } from "node:stream"
 import { UploadSessionState, type UploadSession, type VideoType } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { initBuckets, minioClient, VIDEO_BUCKET_NAME } from "@/lib/minio"
 import { MEDIA_OBJECT_PREFIXES } from "@/lib/media"
-import { transcodeAndUpload } from "@/lib/ffmpeg"
+import { enqueueVideoProcessing } from "@/lib/media-queue"
 import {
   getMultipartUploadParts,
   uploadContentType,
@@ -202,36 +196,6 @@ async function streamObjectToHash(objectKey: string) {
   return hash.digest("hex")
 }
 
-async function downloadObjectToTempFile(objectKey: string, videoId: string) {
-  const tempDir = path.join(os.tmpdir(), "esitv-staging")
-  await fs.mkdir(tempDir, { recursive: true })
-
-  const tempPath = path.join(tempDir, `${videoId}.mp4`)
-  const objectStream = (await minioClient.getObject(VIDEO_BUCKET_NAME, objectKey)) as Readable
-  await pipeline(objectStream, createWriteStream(tempPath))
-  return tempPath
-}
-
-export async function processCompletedUploadSession(sessionId: string) {
-  const session = await prisma.uploadSession.findUnique({ where: { id: sessionId } })
-  if (!session?.videoId || session.state !== UploadSessionState.COMPLETED) {
-    return
-  }
-
-  const tempPath = await downloadObjectToTempFile(session.objectKey, session.videoId)
-  try {
-    const { videoUrl, thumbnailUrl } = await transcodeAndUpload(tempPath, session.videoId)
-    await prisma.video.update({
-      where: { id: session.videoId },
-      data: { url: videoUrl, thumbnailUrl },
-    })
-    await minioClient.removeObject(VIDEO_BUCKET_NAME, session.objectKey)
-  } catch (error) {
-    await fs.rm(tempPath, { force: true })
-    throw error
-  }
-}
-
 export async function completeUploadSession(sessionId: string, ownerId: string) {
   const session = await prisma.uploadSession.findUnique({ where: { id: sessionId } })
   if (!session || session.ownerId !== ownerId) {
@@ -278,8 +242,10 @@ export async function completeUploadSession(sessionId: string, ownerId: string) 
         description: session.description,
         type: session.type,
         isPublic: session.isPublic,
-        url: `${MEDIA_OBJECT_PREFIXES.readyVideo}${session.id}-pending.mp4`,
+        status: "PENDING",
+        url: "",
         thumbnailUrl: null,
+        sourceKey: session.objectKey,
         uploaderId: session.ownerId,
         ...(session.moduleId ? { moduleId: session.moduleId } : {}),
       },
@@ -297,9 +263,19 @@ export async function completeUploadSession(sessionId: string, ownerId: string) 
     return createdVideo
   })
 
-  processCompletedUploadSession(session.id).catch((error) => {
-    console.error(`Failed to process completed upload session ${session.id}:`, error)
-  })
+  try {
+    await enqueueVideoProcessing(video.id, video.processingVersion)
+  } catch (error) {
+    await prisma.video.update({
+      where: { id: video.id },
+      data: {
+        status: "FAILED",
+        processingErrorCode: "QUEUE_ENQUEUE_FAILED",
+        processingErrorMessage: error instanceof Error ? error.message : "Could not enqueue media processing job",
+      },
+    })
+    throw error
+  }
 
   return video
 }
