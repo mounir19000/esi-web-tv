@@ -509,7 +509,7 @@ export default async function VideoPage({ params, searchParams }: VideoPageProps
               )}
 
               {canManageVideo && (
-                <form action={attachCaption} encType="multipart/form-data" className="form-stack caption-form">
+                <form action={attachCaption} className="form-stack caption-form">
                   <input type="hidden" name="videoId" value={video.id} />
                   <div className="field">
                     <label htmlFor="caption">WebVTT file</label>
