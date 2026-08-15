@@ -9,6 +9,7 @@ type VideoCardData = {
   description: string | null
   type: string
   isPublic: boolean
+  audience?: string
   thumbnailUrl: string | null
   createdAt: Date
   uploader: {
@@ -25,6 +26,7 @@ type LiveCardData = {
   title: string
   description: string | null
   isPublic: boolean
+  audience?: string
   status?: string
   startedAt: Date | null
   host: {
@@ -52,6 +54,26 @@ function formatDate(date: Date | null) {
   }).format(date)
 }
 
+function audienceLabel(isPublic: boolean, audience?: string) {
+  if (isPublic || audience === "PUBLIC") {
+    return "Public"
+  }
+
+  if (audience === "MODULE") {
+    return "Module"
+  }
+
+  if (audience === "COHORT") {
+    return "Cohort"
+  }
+
+  if (audience === "SELECTED_USERS") {
+    return "Selected"
+  }
+
+  return "ESI"
+}
+
 export function VideoCard({ video }: { video: VideoCardData }) {
   const thumbnailUrl = getVideoThumbnailUrl(video.id, video.thumbnailUrl)
 
@@ -76,7 +98,9 @@ export function VideoCard({ video }: { video: VideoCardData }) {
         </div>
         <div className="meta-row">
           {video.module && <span className="badge">{video.module.yearGroup}</span>}
-          {video.isPublic && <span className="badge badge-success">Public</span>}
+          <span className={video.isPublic ? "badge badge-success" : "badge"}>
+            {audienceLabel(video.isPublic, video.audience)}
+          </span>
         </div>
       </div>
     </Link>
@@ -106,7 +130,9 @@ export function LiveStreamCard({ stream }: { stream: LiveCardData }) {
         </div>
         <div className="meta-row">
           {stream.module && <span className="badge">{stream.module.yearGroup}</span>}
-          {stream.isPublic && <span className="badge badge-success">Public</span>}
+          <span className={stream.isPublic ? "badge badge-success" : "badge"}>
+            {audienceLabel(stream.isPublic, stream.audience)}
+          </span>
         </div>
       </div>
     </Link>

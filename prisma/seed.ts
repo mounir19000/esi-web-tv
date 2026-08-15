@@ -4,6 +4,7 @@ import prisma from '../src/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { randomBytes } from 'node:crypto'
 import { appConfig } from '../src/lib/env'
+import { ProvisioningStatus, Role } from '@prisma/client'
 
 type DemoAccount = {
   email: string
@@ -90,16 +91,18 @@ async function main() {
   }
 
   console.log('Seeding local/test demo users...')
+  const seededModules = await prisma.module.findMany({ select: { id: true, yearGroup: true } })
   for (const account of demoAccounts) {
     const hashedPassword = await bcrypt.hash(getDemoPassword(account), 10)
 
-    await prisma.user.upsert({
+    const user = await prisma.user.upsert({
       where: { email: account.email },
       update: {
         name: account.name,
         password: hashedPassword,
         role: account.role,
         yearGroup: account.yearGroup,
+        provisioningStatus: ProvisioningStatus.APPROVED,
         isActive: true,
         disabledAt: null,
         sessionVersion: { increment: 1 },
@@ -110,9 +113,36 @@ async function main() {
         password: hashedPassword,
         role: account.role,
         yearGroup: account.yearGroup,
+        provisioningStatus: ProvisioningStatus.APPROVED,
         isActive: true,
       },
     })
+
+    if (account.role === Role.STUDENT && account.yearGroup) {
+      const cohort = await prisma.cohort.upsert({
+        where: { name: account.yearGroup },
+        update: { yearGroup: account.yearGroup },
+        create: { name: account.yearGroup, yearGroup: account.yearGroup },
+      })
+      const studentModules = seededModules.filter((module) => module.yearGroup === account.yearGroup)
+
+      await prisma.cohortMembership.upsert({
+        where: { userId_cohortId: { userId: user.id, cohortId: cohort.id } },
+        update: {},
+        create: { userId: user.id, cohortId: cohort.id },
+      })
+      await prisma.studentModuleEnrollment.createMany({
+        data: studentModules.map((module) => ({ userId: user.id, moduleId: module.id })),
+        skipDuplicates: true,
+      })
+    }
+
+    if (account.role === Role.TEACHER) {
+      await prisma.teacherModuleAssignment.createMany({
+        data: seededModules.map((module) => ({ userId: user.id, moduleId: module.id })),
+        skipDuplicates: true,
+      })
+    }
   }
 
   console.log('Demo users seeded successfully!')

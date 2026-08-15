@@ -2,8 +2,9 @@ import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
 import { v4 as uuidv4 } from "uuid"
-import { RecordingPolicy, StreamStatus } from "@prisma/client"
+import { AudienceType, ProvisioningStatus, RecordingPolicy, StreamStatus } from "@prisma/client"
 import prisma from "@/lib/prisma"
+import { canPublishToAudience, validateAudienceSelection } from "@/lib/content-access"
 import { getCurrentUser, requireEducator } from "@/lib/current-user"
 import { appConfig } from "@/lib/env"
 import { ensureLiveStreamRoom } from "@/lib/livekit-lifecycle"
@@ -14,16 +15,25 @@ export const metadata: Metadata = {
   title: "Go Live | ESI Web TV",
 }
 
+function isAudienceType(value: string): value is AudienceType {
+  return Object.values(AudienceType).includes(value as AudienceType)
+}
+
 export default async function NewLivePage() {
   const user = await getCurrentUser()
   if (!user) {
     redirect("/login?callbackUrl=/live/new")
   }
-  if (user.role !== "TEACHER" && user.role !== "ADMIN") {
+  if (
+    user.provisioningStatus !== ProvisioningStatus.APPROVED ||
+    (user.role !== "TEACHER" && user.role !== "ADMIN")
+  ) {
     redirect("/dashboard")
   }
 
+  const assignedModuleIds = user.teacherAssignments.map((assignment) => assignment.moduleId)
   const modules = await prisma.module.findMany({
+    where: user.role === "ADMIN" ? {} : { id: { in: assignedModuleIds } },
     orderBy: [{ yearGroup: "asc" }, { name: "asc" }],
   })
 
@@ -35,7 +45,7 @@ export default async function NewLivePage() {
     const title = String(formData.get("title") || "").trim()
     const description = String(formData.get("description") || "").trim()
     const moduleId = String(formData.get("moduleId") || "")
-    const isPublic = formData.get("visibility") === "public"
+    const audienceValue = String(formData.get("audience") || "")
     const recordingPolicy = appConfig.livekit.recordingEnabled && formData.get("recordingPolicy") === "auto"
       ? RecordingPolicy.AUTO
       : RecordingPolicy.NONE
@@ -44,12 +54,27 @@ export default async function NewLivePage() {
       throw new Error("Stream title is required")
     }
 
+    if (!isAudienceType(audienceValue)) {
+      throw new Error("Select a valid audience")
+    }
+
+    const audience = audienceValue
+
     const selectedModule = moduleId
       ? await prisma.module.findUnique({ where: { id: moduleId }, select: { id: true } })
       : null
 
     if (moduleId && !selectedModule) {
       throw new Error("Selected module was not found")
+    }
+
+    const audienceError = validateAudienceSelection({ audience, moduleId: selectedModule?.id ?? null })
+    if (audienceError) {
+      throw new Error(audienceError)
+    }
+
+    if (!canPublishToAudience(user, { audience, moduleId: selectedModule?.id ?? null })) {
+      throw new Error("You cannot publish to that audience")
     }
 
     const stream = await prisma.liveStream.create({
@@ -61,7 +86,8 @@ export default async function NewLivePage() {
         status: StreamStatus.STARTING,
         recordingPolicy,
         isLive: false,
-        isPublic,
+        audience,
+        isPublic: audience === AudienceType.PUBLIC,
         ...(selectedModule ? { moduleId: selectedModule.id } : {}),
       },
       include: { module: true },
@@ -124,10 +150,11 @@ export default async function NewLivePage() {
             </div>
 
             <div className="field">
-              <label htmlFor="visibility">Visibility</label>
-              <select id="visibility" name="visibility" className="form-select" defaultValue="module">
-                <option value="module">ESI/module audience</option>
-                <option value="public">Public</option>
+              <label htmlFor="audience">Audience</label>
+              <select id="audience" name="audience" className="form-select" defaultValue="ESI">
+                <option value="ESI">Signed-in ESI users</option>
+                <option value="MODULE">Selected module</option>
+                <option value="PUBLIC">Public visitors</option>
               </select>
             </div>
           </div>

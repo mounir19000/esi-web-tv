@@ -1,4 +1,4 @@
-import { Role, type Prisma } from "@prisma/client"
+import { ProvisioningStatus, Role, type Prisma } from "@prisma/client"
 import { auth } from "@/auth"
 import { isEducator } from "@/lib/content-access"
 import prisma from "@/lib/prisma"
@@ -24,9 +24,23 @@ export const currentUserSelect = {
   image: true,
   role: true,
   yearGroup: true,
+  provisioningStatus: true,
   isActive: true,
   disabledAt: true,
   sessionVersion: true,
+  moduleEnrollments: {
+    select: { moduleId: true },
+  },
+  teacherAssignments: {
+    select: {
+      moduleId: true,
+      canPublish: true,
+      canManage: true,
+    },
+  },
+  cohortMemberships: {
+    select: { cohortId: true },
+  },
 } satisfies Prisma.UserSelect
 
 export type CurrentUser = Prisma.UserGetPayload<{ select: typeof currentUserSelect }>
@@ -89,7 +103,7 @@ export async function requireUser() {
 
 export async function requireEducator() {
   const user = await requireUser()
-  if (!isEducator(user.role)) {
+  if (user.provisioningStatus !== ProvisioningStatus.APPROVED || !isEducator(user.role)) {
     throw new AuthorizationError()
   }
 
@@ -98,7 +112,7 @@ export async function requireEducator() {
 
 export async function requireAdmin() {
   const user = await requireUser()
-  if (user.role !== Role.ADMIN) {
+  if (user.provisioningStatus !== ProvisioningStatus.APPROVED || user.role !== Role.ADMIN) {
     throw new AuthorizationError()
   }
 

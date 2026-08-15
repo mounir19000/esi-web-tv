@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
-import { Role } from "@prisma/client"
+import { ProvisioningStatus, Role } from "@prisma/client"
 import {
   AuthenticationError,
   AuthorizationError,
@@ -17,11 +17,13 @@ function user(overrides: Partial<CurrentUser> = {}): CurrentUser {
     image: null,
     role: Role.TEACHER,
     yearGroup: null,
+    provisioningStatus: ProvisioningStatus.APPROVED,
     isActive: true,
     disabledAt: null,
     sessionVersion: 3,
-    createdAt: new Date("2026-08-15T00:00:00.000Z"),
-    updatedAt: new Date("2026-08-15T00:00:00.000Z"),
+    moduleEnrollments: [],
+    teacherAssignments: [],
+    cohortMemberships: [],
     ...overrides,
   }
 }

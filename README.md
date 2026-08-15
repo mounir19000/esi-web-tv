@@ -92,9 +92,11 @@ Only `@esi.dz` email addresses are accepted.
 | Role | Access |
 | --- | --- |
 | Guest | Can browse public videos and public live streams |
-| Student | Can access public content and videos/live rooms for their year group |
-| Teacher | Can access teaching content, upload videos, and start live streams |
+| Student | Can access public content, ESI-wide private content, and assigned cohort/module content |
+| Teacher | Can access public and ESI-wide content, upload videos, start live streams, and publish to assigned modules |
 | Admin | Can manage users and access all content |
+
+Detailed audience semantics are documented in [Audience Policies](docs/audience-policies.md).
 
 ## Useful Commands
 
@@ -149,7 +151,7 @@ npm run test:livekit-smoke
 
 ## Video Upload Notes
 
-Uploaded MP4 files use server-created multipart upload sessions. The browser uploads chunks directly to private MinIO staging with short-lived signed URLs, then the app finalizes the object and enqueues durable BullMQ media processing in Redis. A standalone media worker downloads staging objects, probes and validates them with FFprobe, runs bounded FFmpeg jobs, publishes adaptive HLS renditions, and updates video lifecycle state.
+Uploaded MP4 files use server-created multipart upload sessions. Creators select an explicit `PUBLIC`, `ESI`, or `MODULE` audience before upload. The browser uploads chunks directly to private MinIO staging with short-lived signed URLs, then the app finalizes the object and enqueues durable BullMQ media processing in Redis. A standalone media worker downloads staging objects, probes and validates them with FFprobe, runs bounded FFmpeg jobs, publishes adaptive HLS renditions, and updates video lifecycle state.
 
 The worker stores source metadata on `Video`, keeps the private source object as a tracked `SOURCE` media asset, and records every generated manifest, variant playlist, segment, thumbnail, and caption in `MediaAsset` or `VideoVariant`. The HLS ladder is generated only up to the source height, so low-resolution uploads are not upscaled. Aspect ratio is preserved with scale-only renditions; the player consumes the master manifest through authorized app routes.
 

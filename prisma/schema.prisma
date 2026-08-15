@@ -16,6 +16,20 @@ enum Role {
   ADMIN
 }
 
+enum ProvisioningStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AudienceType {
+  PUBLIC
+  ESI
+  COHORT
+  MODULE
+  SELECTED_USERS
+}
+
 enum VideoType {
   TEACHING
   CLUB
@@ -110,42 +124,65 @@ enum AuditEventType {
 }
 
 model User {
-  id             String    @id @default(cuid())
-  name           String?
-  email          String?   @unique
-  password       String?
-  emailVerified  DateTime?
-  image          String?
-  role           Role      @default(GUEST)
-  yearGroup      String? // e.g. "1CP", "2CP", etc.
-  isActive       Boolean   @default(true)
-  disabledAt     DateTime?
-  sessionVersion Int       @default(0)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id                 String             @id @default(cuid())
+  name               String?
+  email              String?            @unique
+  password           String?
+  emailVerified      DateTime?
+  image              String?
+  role               Role               @default(GUEST)
+  yearGroup          String? // e.g. "1CP", "2CP", etc.
+  provisioningStatus ProvisioningStatus @default(APPROVED)
+  isActive           Boolean            @default(true)
+  disabledAt         DateTime?
+  sessionVersion     Int                @default(0)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
-  videos              Video[]         @relation("Uploader")
-  liveStreams         LiveStream[]    @relation("Host")
-  uploadSessions      UploadSession[] @relation("UploadOwner")
-  accounts            Account[]
-  sessions            Session[]
-  auditEventsAuthored AuditEvent[]    @relation("AuditActor")
-  auditEventsSubject  AuditEvent[]    @relation("AuditSubject")
+  videos                  Video[]                   @relation("Uploader")
+  liveStreams             LiveStream[]              @relation("Host")
+  uploadSessions          UploadSession[]           @relation("UploadOwner")
+  cohortMemberships       CohortMembership[]
+  moduleEnrollments       StudentModuleEnrollment[]
+  teacherAssignments      TeacherModuleAssignment[]
+  videoAudienceUsers      VideoAudienceUser[]
+  liveStreamAudienceUsers LiveStreamAudienceUser[]
+  accounts                Account[]
+  sessions                Session[]
+  auditEventsAuthored     AuditEvent[]              @relation("AuditActor")
+  auditEventsSubject      AuditEvent[]              @relation("AuditSubject")
 
   @@index([isActive, role])
 }
 
 model Module {
-  id             String          @id @default(cuid())
-  name           String
-  yearGroup      String // e.g. "1CP"
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id                 String                    @id @default(cuid())
+  name               String
+  yearGroup          String // e.g. "1CP"
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  videos             Video[]
+  liveStreams        LiveStream[]
+  uploadSessions     UploadSession[]
+  studentEnrollments StudentModuleEnrollment[]
+  teacherAssignments TeacherModuleAssignment[]
+
+  @@unique([name, yearGroup])
+  @@index([yearGroup, name])
+}
+
+model Cohort {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  yearGroup String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships    CohortMembership[]
   videos         Video[]
   liveStreams    LiveStream[]
   uploadSessions UploadSession[]
 
-  @@unique([name, yearGroup])
   @@index([yearGroup, name])
 }
 
@@ -155,6 +192,7 @@ model Video {
   description             String?
   type                    VideoType
   isPublic                Boolean         @default(false)
+  audience                AudienceType    @default(ESI)
   status                  VideoStatus     @default(READY)
   url                     String // MinIO URL or path
   thumbnailUrl            String?
@@ -187,15 +225,21 @@ model Video {
   moduleId String?
   module   Module? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
 
-  publishedRecording Recording?     @relation("PublishedRecording")
+  cohortId String?
+  cohort   Cohort? @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+
+  publishedRecording Recording?          @relation("PublishedRecording")
   variants           VideoVariant[]
   mediaAssets        MediaAsset[]
+  audienceUsers      VideoAudienceUser[]
 
   @@index([status, createdAt])
   @@index([uploaderId, status])
   @@index([isPublic, status, createdAt])
+  @@index([audience, status, createdAt])
   @@index([type, status, createdAt])
   @@index([moduleId, status, createdAt])
+  @@index([cohortId, status, createdAt])
   @@index([uploaderId, createdAt])
 }
 
@@ -253,6 +297,7 @@ model UploadSession {
   description       String?
   type              VideoType
   isPublic          Boolean            @default(false)
+  audience          AudienceType       @default(ESI)
   originalFileName  String?
   objectKey         String             @unique
   expectedSize      BigInt
@@ -273,8 +318,12 @@ model UploadSession {
   moduleId String?
   module   Module? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
 
+  cohortId String?
+  cohort   Cohort? @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+
   @@index([ownerId, state, expiresAt])
   @@index([moduleId, state, createdAt])
+  @@index([cohortId, state, createdAt])
 }
 
 model LiveStream {
@@ -282,6 +331,7 @@ model LiveStream {
   title               String
   description         String?
   isPublic            Boolean         @default(false)
+  audience            AudienceType    @default(ESI)
   isLive              Boolean         @default(false)
   status              StreamStatus    @default(ENDED)
   recordingPolicy     RecordingPolicy @default(NONE)
@@ -300,13 +350,91 @@ model LiveStream {
   moduleId String?
   module   Module? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
 
-  recordings    Recording[]
-  recordingJobs RecordingJob[]
+  cohortId String?
+  cohort   Cohort? @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+
+  recordings              Recording[]
+  recordingJobs           RecordingJob[]
+  liveStreamAudienceUsers LiveStreamAudienceUser[]
 
   @@index([isLive, isPublic, startedAt])
+  @@index([audience, isLive, startedAt])
   @@index([status, startedAt])
   @@index([moduleId, isLive, startedAt])
+  @@index([cohortId, isLive, startedAt])
   @@index([hostId, isLive, startedAt])
+}
+
+model CohortMembership {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  cohortId String
+  cohort   Cohort @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cohortId])
+  @@index([cohortId, userId])
+}
+
+model StudentModuleEnrollment {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  moduleId String
+  module   Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, moduleId])
+  @@index([moduleId, userId])
+}
+
+model TeacherModuleAssignment {
+  id         String   @id @default(cuid())
+  canPublish Boolean  @default(true)
+  canManage  Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  moduleId String
+  module   Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, moduleId])
+  @@index([moduleId, userId])
+}
+
+model VideoAudienceUser {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  videoId String
+  video   Video  @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([videoId, userId])
+  @@index([userId])
+}
+
+model LiveStreamAudienceUser {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  liveStreamId String
+  liveStream   LiveStream @relation(fields: [liveStreamId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([liveStreamId, userId])
+  @@index([userId])
 }
 
 model Recording {

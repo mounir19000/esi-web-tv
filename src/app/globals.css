@@ -594,6 +594,38 @@ video {
   margin-top: 4px;
 }
 
+.assignment-details {
+  width: 100%;
+  color: var(--muted);
+}
+
+.assignment-details summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.assignment-form {
+  margin-top: 10px;
+  max-width: 420px;
+}
+
+.assignment-fieldset {
+  display: grid;
+  gap: 8px;
+  max-height: 190px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.assignment-fieldset legend {
+  color: var(--ink);
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
 .caption-form {
   margin-top: 18px;
 }

@@ -1,10 +1,13 @@
 import Link from "next/link";
 import Image from "next/image";
+import { ProvisioningStatus } from "@prisma/client";
 import { getCurrentUser } from "@/lib/current-user";
 
 export default async function Header() {
   const user = await getCurrentUser();
-  const canCreate = user?.role === "TEACHER" || user?.role === "ADMIN";
+  const canCreate =
+    user?.provisioningStatus === ProvisioningStatus.APPROVED &&
+    (user.role === "TEACHER" || user.role === "ADMIN");
 
   return (
     <header className="site-header">

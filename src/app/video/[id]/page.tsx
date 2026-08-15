@@ -89,6 +89,10 @@ export default async function VideoPage({ params, searchParams }: VideoPageProps
     include: {
       uploader: true,
       module: true,
+      cohort: true,
+      audienceUsers: {
+        select: { userId: true },
+      },
       mediaAssets: {
         where: {
           type: MediaAssetType.CAPTION,
@@ -155,7 +159,9 @@ export default async function VideoPage({ params, searchParams }: VideoPageProps
                   <span className="badge badge-accent">{video.type}</span>
                   {!isReady && <span className="badge">{video.status}</span>}
                   {video.isPublic && <span className="badge badge-success">Public</span>}
+                  {!video.isPublic && <span className="badge">{video.audience}</span>}
                   {video.module && <span className="badge">{video.module.yearGroup}</span>}
+                  {video.cohort && <span className="badge">{video.cohort.name}</span>}
                   {video.variants.length > 0 && <span className="badge">{video.variants.length} variants</span>}
                   {isReady && thumbnailNeedsRetry && <span className="badge badge-danger">Thumbnail {video.thumbnailStatus}</span>}
                 </div>

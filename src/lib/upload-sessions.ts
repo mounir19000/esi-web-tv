@@ -1,5 +1,5 @@
 import { randomUUID, createHash } from "node:crypto"
-import { UploadSessionState, type UploadSession, type VideoType } from "@prisma/client"
+import { AudienceType, UploadSessionState, type UploadSession, type VideoType } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { getMinioClient, initBuckets, VIDEO_BUCKET_NAME } from "@/lib/minio"
 import { MEDIA_OBJECT_PREFIXES } from "@/lib/media"
@@ -40,8 +40,10 @@ export type CreateUploadSessionInput = {
   title: string
   description: string | null
   type: VideoType
+  audience: AudienceType
   isPublic: boolean
   moduleId: string | null
+  cohortId?: string | null
   originalFileName: string | null
   expectedSize: number
   expectedType: string
@@ -145,6 +147,7 @@ export async function createUploadSession(input: CreateUploadSessionInput) {
       title: input.title,
       description: input.description,
       type: input.type,
+      audience: input.audience,
       isPublic: input.isPublic,
       originalFileName: input.originalFileName,
       objectKey,
@@ -157,6 +160,7 @@ export async function createUploadSession(input: CreateUploadSessionInput) {
       expiresAt: new Date(Date.now() + uploadSessionTtlMs),
       ownerId: input.ownerId,
       ...(input.moduleId ? { moduleId: input.moduleId } : {}),
+      ...(input.cohortId ? { cohortId: input.cohortId } : {}),
     },
   })
 
@@ -245,6 +249,7 @@ export async function completeUploadSession(sessionId: string, ownerId: string) 
         title: session.title,
         description: session.description,
         type: session.type,
+        audience: session.audience,
         isPublic: session.isPublic,
         status: "PENDING",
         url: "",
@@ -252,6 +257,7 @@ export async function completeUploadSession(sessionId: string, ownerId: string) 
         sourceKey: session.objectKey,
         uploaderId: session.ownerId,
         ...(session.moduleId ? { moduleId: session.moduleId } : {}),
+        ...(session.cohortId ? { cohortId: session.cohortId } : {}),
       },
     })
 

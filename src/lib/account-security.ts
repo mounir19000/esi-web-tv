@@ -1,4 +1,4 @@
-import { AuditEventType, Role, type Prisma } from "@prisma/client"
+import { AuditEventType, ProvisioningStatus, Role, type Prisma } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { recordAuditEvent } from "@/lib/audit"
 
@@ -80,11 +80,12 @@ export async function updateUserRoleAndRevokeSessions(
   actorId: string,
   role: Role,
   yearGroup: string | null,
+  provisioningStatus: ProvisioningStatus = ProvisioningStatus.APPROVED,
 ) {
   const updatedUser = await prisma.$transaction(async (tx) => {
     const previousUser = await tx.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { role: true, yearGroup: true },
+      select: { role: true, yearGroup: true, provisioningStatus: true },
     })
 
     const user = await tx.user.update({
@@ -92,9 +93,10 @@ export async function updateUserRoleAndRevokeSessions(
       data: {
         role,
         yearGroup,
+        provisioningStatus,
         sessionVersion: { increment: 1 },
       },
-      select: { id: true, role: true, yearGroup: true, sessionVersion: true },
+      select: { id: true, role: true, yearGroup: true, provisioningStatus: true, sessionVersion: true },
     })
 
     await tx.session.deleteMany({ where: { userId } })
@@ -107,10 +109,12 @@ export async function updateUserRoleAndRevokeSessions(
           from: {
             role: previousUser.role,
             yearGroup: previousUser.yearGroup,
+            provisioningStatus: previousUser.provisioningStatus,
           },
           to: {
             role: user.role,
             yearGroup: user.yearGroup,
+            provisioningStatus: user.provisioningStatus,
           },
         } satisfies Prisma.InputJsonValue,
       },
