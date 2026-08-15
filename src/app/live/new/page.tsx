@@ -2,8 +2,8 @@ import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
 import { v4 as uuidv4 } from "uuid"
-import { auth } from "@/auth"
 import prisma from "@/lib/prisma"
+import { getCurrentUser, requireEducator } from "@/lib/current-user"
 
 export const dynamic = "force-dynamic"
 
@@ -12,11 +12,11 @@ export const metadata: Metadata = {
 }
 
 export default async function NewLivePage() {
-  const session = await auth()
-  if (!session?.user) {
+  const user = await getCurrentUser()
+  if (!user) {
     redirect("/login?callbackUrl=/live/new")
   }
-  if (session.user.role !== "TEACHER" && session.user.role !== "ADMIN") {
+  if (user.role !== "TEACHER" && user.role !== "ADMIN") {
     redirect("/dashboard")
   }
 
@@ -27,10 +27,7 @@ export default async function NewLivePage() {
   async function createLiveStream(formData: FormData) {
     "use server"
 
-    const session = await auth()
-    if (!session?.user || (session.user.role !== "TEACHER" && session.user.role !== "ADMIN")) {
-      throw new Error("Unauthorized")
-    }
+    const user = await requireEducator()
 
     const title = String(formData.get("title") || "").trim()
     const description = String(formData.get("description") || "").trim()
@@ -54,7 +51,7 @@ export default async function NewLivePage() {
         title,
         description,
         streamKey: uuidv4(),
-        hostId: session.user.id,
+        hostId: user.id,
         isLive: true,
         isPublic,
         startedAt: new Date(),

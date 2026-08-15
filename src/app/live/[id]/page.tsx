@@ -1,9 +1,9 @@
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
-import { auth } from "@/auth"
 import prisma from "@/lib/prisma"
 import { canManageUserContent, canViewScopedContent } from "@/lib/content-access"
+import { getCurrentUser, requireUser } from "@/lib/current-user"
 import LiveRoomClient from "@/components/LiveRoomClient"
 
 export const dynamic = "force-dynamic"
@@ -16,7 +16,7 @@ type LiveRoomPageProps = {
 
 export default async function LiveRoomPage({ params }: LiveRoomPageProps) {
   const { id } = await params
-  const session = await auth()
+  const user = await getCurrentUser()
   const stream = await prisma.liveStream.findUnique({
     where: { streamKey: id },
     include: { host: true, module: true },
@@ -26,24 +26,24 @@ export default async function LiveRoomPage({ params }: LiveRoomPageProps) {
     notFound()
   }
 
-  if (!canViewScopedContent(stream, session?.user)) {
-    redirect(session?.user ? "/live" : `/login?callbackUrl=/live/${id}`)
+  if (!canViewScopedContent(stream, user)) {
+    redirect(user ? "/live" : `/login?callbackUrl=/live/${id}`)
   }
 
-  const canManage = canManageUserContent(stream.hostId, session?.user)
+  const canManage = canManageUserContent(stream.hostId, user)
   const canPublish = canManage && stream.isLive
 
   async function endLiveStream(formData: FormData) {
     "use server"
 
     const streamKey = String(formData.get("streamKey") || "")
-    const session = await auth()
+    const user = await requireUser()
     const stream = await prisma.liveStream.findUnique({
       where: { streamKey },
       select: { id: true, hostId: true },
     })
 
-    if (!stream || !canManageUserContent(stream.hostId, session?.user)) {
+    if (!stream || !canManageUserContent(stream.hostId, user)) {
       throw new Error("Unauthorized")
     }
 

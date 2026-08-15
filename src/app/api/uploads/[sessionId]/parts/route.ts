@@ -1,5 +1,5 @@
-import { auth } from "@/auth"
 import prisma from "@/lib/prisma"
+import { authErrorStatus, requireEducator } from "@/lib/current-user"
 import { refreshUploadPartUrls } from "@/lib/upload-sessions"
 import { NextResponse } from "next/server"
 
@@ -14,9 +14,15 @@ function jsonError(error: string, status: number) {
 }
 
 export async function POST(request: Request, context: { params: Promise<UploadSessionRouteParams> }) {
-  const session = await auth()
-  if (!session?.user) {
-    return jsonError("Sign in required", 401)
+  let user: Awaited<ReturnType<typeof requireEducator>>
+  try {
+    user = await requireEducator()
+  } catch (error) {
+    const status = authErrorStatus(error)
+    if (status) {
+      return jsonError(status === 401 ? "Sign in required" : "Forbidden", status)
+    }
+    throw error
   }
 
   const { sessionId } = await context.params
@@ -29,7 +35,7 @@ export async function POST(request: Request, context: { params: Promise<UploadSe
     return jsonError("Upload session not found", 404)
   }
 
-  if (uploadSession.ownerId !== session.user.id) {
+  if (uploadSession.ownerId !== user.id) {
     return jsonError("Forbidden", 403)
   }
 
@@ -45,7 +51,7 @@ export async function POST(request: Request, context: { params: Promise<UploadSe
   }
 
   try {
-    const parts = await refreshUploadPartUrls(sessionId, session.user.id, partNumbers.map(Number))
+    const parts = await refreshUploadPartUrls(sessionId, user.id, partNumbers.map(Number))
     return NextResponse.json({ parts })
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : "Could not refresh upload parts", 400)

@@ -1,13 +1,13 @@
 import { AccessToken } from 'livekit-server-sdk';
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
 import prisma from '@/lib/prisma';
 import { canViewScopedContent } from '@/lib/content-access';
 import { randomUUID } from 'crypto';
 import { getLiveKitCredentials, LiveKitConfigurationError } from '@/lib/livekit-config';
+import { getCurrentAuth } from '@/lib/current-user';
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
+  const { session, user } = await getCurrentAuth();
 
   const room = req.nextUrl.searchParams.get('room');
   if (!room) {
@@ -23,10 +23,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Live stream not found' }, { status: 404 });
   }
 
-  if (!canViewScopedContent(stream, session?.user)) {
+  if (session?.user && !user) {
+    return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
+  }
+
+  if (!canViewScopedContent(stream, user)) {
     return NextResponse.json(
-      { error: session?.user ? 'Forbidden' : 'Sign in required' },
-      { status: session?.user ? 403 : 401 },
+      { error: user ? 'Forbidden' : 'Sign in required' },
+      { status: user ? 403 : 401 },
     );
   }
 
@@ -42,8 +46,8 @@ export async function GET(req: NextRequest) {
     throw error;
   }
 
-  const participantIdentity = session?.user?.id || `guest-${randomUUID()}`;
-  const participantName = session?.user?.name || 'Guest';
+  const participantIdentity = user?.id || `guest-${randomUUID()}`;
+  const participantName = user?.name || 'Guest';
   
   const at = new AccessToken(credentials.apiKey, credentials.apiSecret, {
     identity: participantIdentity,
@@ -51,8 +55,8 @@ export async function GET(req: NextRequest) {
   });
 
   const canPublish =
-    session?.user?.role === 'ADMIN' ||
-    Boolean(session?.user?.id && session.user.id === stream.hostId);
+    user?.role === 'ADMIN' ||
+    Boolean(user?.id && user.id === stream.hostId);
 
   at.addGrant({ 
     room, 

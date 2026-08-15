@@ -1,9 +1,9 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { auth } from "@/auth"
 import prisma from "@/lib/prisma"
 import { visibleVideoWhere } from "@/lib/content-access"
 import { VideoCard } from "@/components/ContentCards"
+import { getCurrentUser } from "@/lib/current-user"
 
 export const dynamic = "force-dynamic"
 
@@ -20,10 +20,10 @@ type ExplorePageProps = {
 }
 
 export default async function ExplorePage({ searchParams }: ExplorePageProps) {
-  const session = await auth()
+  const user = await getCurrentUser()
   const params = await searchParams
   const selectedType = videoTypes.find((type) => type === params?.type)
-  const visibilityWhere = visibleVideoWhere(session?.user)
+  const visibilityWhere = visibleVideoWhere(user)
 
   const videos = await prisma.video.findMany({
     where: selectedType ? { AND: [visibilityWhere, { type: selectedType }] } : visibilityWhere,

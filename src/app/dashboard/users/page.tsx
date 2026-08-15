@@ -1,8 +1,8 @@
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
-import { auth } from "@/auth"
 import prisma from "@/lib/prisma"
-import { createUser, deleteUser } from "./actions"
+import { getCurrentUser } from "@/lib/current-user"
+import { createUser, disableUser, updateUserRole } from "./actions"
 
 export const dynamic = "force-dynamic"
 
@@ -11,8 +11,8 @@ export const metadata: Metadata = {
 }
 
 export default async function UsersPage() {
-  const session = await auth()
-  if (session?.user?.role !== "ADMIN") {
+  const currentUser = await getCurrentUser()
+  if (currentUser?.role !== "ADMIN") {
     redirect("/dashboard")
   }
 
@@ -93,17 +93,40 @@ export default async function UsersPage() {
                       <td><span className="badge">{user.role}</span></td>
                       <td>{user.yearGroup || "-"}</td>
                       <td>
-                        {user.id === session.user.id ? (
+                        {user.id === currentUser.id ? (
                           <span className="muted small">Current user</span>
                         ) : (
-                          <form
-                            action={async () => {
-                              "use server"
-                              await deleteUser(user.id)
-                            }}
-                          >
-                            <button type="submit" className="button-quiet">Delete</button>
-                          </form>
+                          <div className="actions">
+                            <form action={updateUserRole} className="actions">
+                              <input type="hidden" name="id" value={user.id} />
+                              <select name="role" defaultValue={user.role} className="form-select" aria-label={`Role for ${user.email}`}>
+                                <option value="GUEST">Guest</option>
+                                <option value="STUDENT">Student</option>
+                                <option value="TEACHER">Teacher</option>
+                                <option value="ADMIN">Admin</option>
+                              </select>
+                              <input
+                                name="yearGroup"
+                                defaultValue={user.yearGroup || ""}
+                                placeholder="1CP"
+                                className="form-input"
+                                aria-label={`Year group for ${user.email}`}
+                              />
+                              <button type="submit" className="button-quiet">Update</button>
+                            </form>
+                            {user.isActive ? (
+                              <form
+                                action={async () => {
+                                  "use server"
+                                  await disableUser(user.id)
+                                }}
+                              >
+                                <button type="submit" className="button-quiet">Disable</button>
+                              </form>
+                            ) : (
+                              <span className="muted small">Disabled</span>
+                            )}
+                          </div>
                         )}
                       </td>
                     </tr>

@@ -1,10 +1,10 @@
 import type { Metadata } from "next"
 import Image from "next/image"
 import Link from "next/link"
-import { auth } from "@/auth"
 import prisma from "@/lib/prisma"
 import { visibleLiveStreamWhere, visibleVideoWhere } from "@/lib/content-access"
 import { LiveStreamCard, VideoCard } from "@/components/ContentCards"
+import { getCurrentUser } from "@/lib/current-user"
 
 export const dynamic = "force-dynamic"
 
@@ -13,8 +13,7 @@ export const metadata: Metadata = {
 }
 
 export default async function Home() {
-  const session = await auth()
-  const viewer = session?.user
+  const viewer = await getCurrentUser()
 
   const [liveStreams, videos, videoCount, moduleCount] = await Promise.all([
     prisma.liveStream.findMany({

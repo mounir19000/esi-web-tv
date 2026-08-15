@@ -1,16 +1,16 @@
 import type { Metadata } from "next"
 import Image from "next/image"
 import { redirect } from "next/navigation"
-import { auth } from "@/auth"
 import LoginForm from "@/components/LoginForm"
+import { getCurrentUser } from "@/lib/current-user"
 
 export const metadata: Metadata = {
   title: "Sign in | ESI Web TV",
 }
 
 export default async function LoginPage() {
-  const session = await auth()
-  if (session?.user) {
+  const user = await getCurrentUser()
+  if (user) {
     redirect("/dashboard")
   }
 

@@ -1,9 +1,9 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { auth } from "@/auth"
 import prisma from "@/lib/prisma"
 import { visibleLiveStreamWhere } from "@/lib/content-access"
 import { LiveStreamCard } from "@/components/ContentCards"
+import { getCurrentUser } from "@/lib/current-user"
 
 export const dynamic = "force-dynamic"
 
@@ -12,11 +12,11 @@ export const metadata: Metadata = {
 }
 
 export default async function LiveChannelsPage() {
-  const session = await auth()
-  const canCreate = session?.user?.role === "TEACHER" || session?.user?.role === "ADMIN"
+  const user = await getCurrentUser()
+  const canCreate = user?.role === "TEACHER" || user?.role === "ADMIN"
 
   const activeStreams = await prisma.liveStream.findMany({
-    where: { isLive: true, ...visibleLiveStreamWhere(session?.user) },
+    where: { isLive: true, ...visibleLiveStreamWhere(user) },
     orderBy: { startedAt: "desc" },
     include: { host: true, module: true },
   })
@@ -34,7 +34,7 @@ export default async function LiveChannelsPage() {
             {canCreate ? (
               <Link href="/live/new" className="button">Go live</Link>
             ) : (
-              !session?.user && <Link href="/login?callbackUrl=/live" className="button-secondary">Sign in</Link>
+              !user && <Link href="/login?callbackUrl=/live" className="button-secondary">Sign in</Link>
             )}
           </div>
         </div>

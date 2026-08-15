@@ -1,7 +1,7 @@
-import { auth } from "@/auth"
 import { minioClient, VIDEO_BUCKET_NAME } from "@/lib/minio"
 import { isVideoMediaAsset, resolveVideoAssetObjectKey } from "@/lib/media"
 import { authorizeVideoAccess } from "@/lib/video-authorization"
+import { getCurrentUser } from "@/lib/current-user"
 import { VideoStatus } from "@prisma/client"
 import { NextResponse } from "next/server"
 
@@ -39,8 +39,8 @@ export async function GET(_request: Request, context: { params: Promise<MediaRou
     return jsonError("Media asset not found", 404)
   }
 
-  const session = await auth()
-  const access = await authorizeVideoAccess(videoId, session?.user)
+  const user = await getCurrentUser()
+  const access = await authorizeVideoAccess(videoId, user)
 
   if (access.status === "not-found") {
     return jsonError("Video not found", 404)
