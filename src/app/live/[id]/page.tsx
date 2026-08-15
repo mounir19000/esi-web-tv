@@ -1,10 +1,17 @@
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
+import { RecordingStatus, StreamStatus } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { canManageUserContent, canViewScopedContent } from "@/lib/content-access"
 import { getCurrentUser, requireUser } from "@/lib/current-user"
 import { appConfig } from "@/lib/env"
+import {
+  discardRecording,
+  endLiveStream as endLiveStreamRoom,
+  publishRecording,
+  retryRecording,
+} from "@/lib/livekit-lifecycle"
 import LiveRoomClient from "@/components/LiveRoomClient"
 
 export const dynamic = "force-dynamic"
@@ -15,12 +22,31 @@ type LiveRoomPageProps = {
   }>
 }
 
+const joinableStreamStatuses: StreamStatus[] = [StreamStatus.STARTING, StreamStatus.LIVE]
+const endingStreamStatuses: StreamStatus[] = [StreamStatus.STARTING, StreamStatus.LIVE, StreamStatus.ENDING]
+const discardableRecordingStatuses: RecordingStatus[] = [RecordingStatus.READY, RecordingStatus.FAILED]
+
+function streamStatusLabel(status: StreamStatus) {
+  return status.charAt(0) + status.slice(1).toLowerCase()
+}
+
+function recordingStatusLabel(status: RecordingStatus) {
+  return status.charAt(0) + status.slice(1).toLowerCase()
+}
+
 export default async function LiveRoomPage({ params }: LiveRoomPageProps) {
   const { id } = await params
   const user = await getCurrentUser()
   const stream = await prisma.liveStream.findUnique({
     where: { streamKey: id },
-    include: { host: true, module: true },
+    include: {
+      host: true,
+      module: true,
+      recordings: {
+        orderBy: { createdAt: "desc" },
+        include: { publishedVideo: true },
+      },
+    },
   })
 
   if (!stream) {
@@ -32,7 +58,9 @@ export default async function LiveRoomPage({ params }: LiveRoomPageProps) {
   }
 
   const canManage = canManageUserContent(stream.hostId, user)
-  const canPublish = canManage && stream.isLive
+  const canPublish = canManage && joinableStreamStatuses.includes(stream.status)
+  const canJoinRoom = canPublish || (stream.status === StreamStatus.LIVE && stream.isLive)
+  const canEndStream = canManage && endingStreamStatuses.includes(stream.status)
 
   async function endLiveStream(formData: FormData) {
     "use server"
@@ -48,15 +76,47 @@ export default async function LiveRoomPage({ params }: LiveRoomPageProps) {
       throw new Error("Unauthorized")
     }
 
-    await prisma.liveStream.update({
-      where: { id: stream.id },
-      data: { isLive: false, endedAt: new Date() },
-    })
+    await endLiveStreamRoom(stream.id)
 
     revalidatePath("/")
     revalidatePath("/live")
     revalidatePath("/dashboard")
     redirect("/live")
+  }
+
+  async function publishRecordingAction(formData: FormData) {
+    "use server"
+
+    const user = await requireUser()
+    const recordingId = String(formData.get("recordingId") || "")
+    const videoId = await publishRecording(recordingId, user)
+
+    revalidatePath(`/live/${id}`)
+    revalidatePath("/explore")
+    revalidatePath("/dashboard")
+    redirect(`/video/${videoId}`)
+  }
+
+  async function discardRecordingAction(formData: FormData) {
+    "use server"
+
+    const user = await requireUser()
+    const recordingId = String(formData.get("recordingId") || "")
+    await discardRecording(recordingId, user)
+
+    revalidatePath(`/live/${id}`)
+    redirect(`/live/${id}`)
+  }
+
+  async function retryRecordingAction(formData: FormData) {
+    "use server"
+
+    const user = await requireUser()
+    const recordingId = String(formData.get("recordingId") || "")
+    await retryRecording(recordingId, user)
+
+    revalidatePath(`/live/${id}`)
+    redirect(`/live/${id}`)
   }
 
   return (
@@ -70,13 +130,15 @@ export default async function LiveRoomPage({ params }: LiveRoomPageProps) {
               <span>{stream.host.name || "ESI"}</span>
               {stream.module && <span>{stream.module.yearGroup} · {stream.module.name}</span>}
               {stream.isPublic && <span className="badge badge-success">Public</span>}
-              {stream.isLive ? <span className="badge badge-live">Live</span> : <span className="badge">Ended</span>}
+              <span className={stream.status === StreamStatus.LIVE ? "badge badge-live" : "badge"}>
+                {streamStatusLabel(stream.status)}
+              </span>
             </div>
           </div>
 
           <div className="actions">
             <Link href="/live" className="button-secondary">Back to live</Link>
-            {canManage && stream.isLive && (
+            {canEndStream && (
               <form action={endLiveStream}>
                 <input type="hidden" name="streamKey" value={stream.streamKey} />
                 <button type="submit" className="button-danger">End stream</button>
@@ -88,12 +150,26 @@ export default async function LiveRoomPage({ params }: LiveRoomPageProps) {
 
       <main className="live-content">
         <div className="live-stage" data-lk-theme="default">
-          {stream.isLive ? (
+          {canJoinRoom ? (
             <LiveRoomClient
               roomName={stream.streamKey}
               canPublish={canPublish}
               serverUrl={appConfig.livekit.publicUrl}
             />
+          ) : stream.status === StreamStatus.STARTING ? (
+            <div className="live-status">
+              <div>
+                <h2 className="section-title">Waiting for host</h2>
+                <p className="muted">This room will open when the broadcast connection is active.</p>
+              </div>
+            </div>
+          ) : stream.status === StreamStatus.FAILED ? (
+            <div className="live-status">
+              <div>
+                <h2 className="section-title">Stream unavailable</h2>
+                <p className="muted">The provider room could not be started.</p>
+              </div>
+            </div>
           ) : (
             <div className="live-status">
               <div>
@@ -103,6 +179,70 @@ export default async function LiveRoomPage({ params }: LiveRoomPageProps) {
             </div>
           )}
         </div>
+
+        {canManage && (
+          <section className="recording-panel">
+            <div className="panel-header">
+              <div>
+                <h2 className="section-title">Recordings</h2>
+                <p className="muted">Manage captured files from this broadcast.</p>
+              </div>
+            </div>
+
+            {stream.recordings.length === 0 ? (
+              <div className="empty-state">
+                <h3 className="card-title">No recordings yet</h3>
+                <p className="muted">Recording status will appear here after the host connection is active.</p>
+              </div>
+            ) : (
+              <div className="list">
+                {stream.recordings.map((recording) => (
+                  <div className="list-item recording-list-item" key={recording.id}>
+                    <div>
+                      <div className="meta-row">
+                        <span className="badge">{recordingStatusLabel(recording.status)}</span>
+                        {recording.sizeBytes && <span>{Number(recording.sizeBytes)} bytes</span>}
+                        {recording.durationSeconds && <span>{recording.durationSeconds}s</span>}
+                      </div>
+                      {recording.errorMessage && <p className="field-hint">{recording.errorMessage}</p>}
+                      {recording.publishedVideo && (
+                        <Link href={`/video/${recording.publishedVideo.id}`} className="button-quiet">
+                          Open video
+                        </Link>
+                      )}
+                    </div>
+
+                    <div className="actions">
+                      {recording.objectKey && (
+                        <Link href={`/api/recordings/${recording.id}/download`} className="button-secondary">
+                          Download
+                        </Link>
+                      )}
+                      {recording.status === RecordingStatus.READY && (
+                        <form action={publishRecordingAction}>
+                          <input type="hidden" name="recordingId" value={recording.id} />
+                          <button type="submit" className="button">Publish</button>
+                        </form>
+                      )}
+                      {recording.status === RecordingStatus.FAILED && (
+                        <form action={retryRecordingAction}>
+                          <input type="hidden" name="recordingId" value={recording.id} />
+                          <button type="submit" className="button-secondary">Retry</button>
+                        </form>
+                      )}
+                      {discardableRecordingStatuses.includes(recording.status) && (
+                        <form action={discardRecordingAction}>
+                          <input type="hidden" name="recordingId" value={recording.id} />
+                          <button type="submit" className="button-danger">Discard</button>
+                        </form>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
       </main>
     </div>
   )

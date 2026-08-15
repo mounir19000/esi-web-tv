@@ -2,8 +2,11 @@ import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
 import { v4 as uuidv4 } from "uuid"
+import { RecordingPolicy, StreamStatus } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { getCurrentUser, requireEducator } from "@/lib/current-user"
+import { appConfig } from "@/lib/env"
+import { ensureLiveStreamRoom } from "@/lib/livekit-lifecycle"
 
 export const dynamic = "force-dynamic"
 
@@ -33,6 +36,9 @@ export default async function NewLivePage() {
     const description = String(formData.get("description") || "").trim()
     const moduleId = String(formData.get("moduleId") || "")
     const isPublic = formData.get("visibility") === "public"
+    const recordingPolicy = appConfig.livekit.recordingEnabled && formData.get("recordingPolicy") === "auto"
+      ? RecordingPolicy.AUTO
+      : RecordingPolicy.NONE
 
     if (!title) {
       throw new Error("Stream title is required")
@@ -52,12 +58,16 @@ export default async function NewLivePage() {
         description,
         streamKey: uuidv4(),
         hostId: user.id,
-        isLive: true,
+        status: StreamStatus.STARTING,
+        recordingPolicy,
+        isLive: false,
         isPublic,
-        startedAt: new Date(),
         ...(selectedModule ? { moduleId: selectedModule.id } : {}),
       },
+      include: { module: true },
     })
+
+    await ensureLiveStreamRoom(stream)
 
     revalidatePath("/")
     revalidatePath("/live")
@@ -121,6 +131,13 @@ export default async function NewLivePage() {
               </select>
             </div>
           </div>
+
+          {appConfig.livekit.recordingEnabled && (
+            <label className="checkbox-row">
+              <input type="checkbox" name="recordingPolicy" value="auto" />
+              <span>Record this broadcast</span>
+            </label>
+          )}
 
           <button type="submit" className="button">Go live now</button>
         </form>

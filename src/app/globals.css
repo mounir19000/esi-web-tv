@@ -739,6 +739,26 @@ video {
   text-align: center;
 }
 
+.recording-panel {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius);
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.recording-list-item {
+  align-items: flex-start;
+}
+
+.recording-list-item > div:first-child {
+  display: grid;
+  gap: 8px;
+}
+
 .footer {
   border-top: 1px solid var(--border);
   padding-block: 24px;

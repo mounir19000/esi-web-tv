@@ -105,6 +105,7 @@ npm run build
 npm run lint
 npm run test:unit
 npm run test:livekit-smoke
+npm run reconcile:livekit
 npx playwright test
 DOTENV_CONFIG_PATH=.env.local npx prisma migrate deploy
 DOTENV_CONFIG_PATH=.env.local npx prisma db seed
@@ -124,12 +125,21 @@ The included Docker Compose file starts:
 | Redis | `localhost:6379` |
 | Media worker | `npm run worker:media` |
 | LiveKit | `ws://localhost:7880` |
+| LiveKit Egress | Docker Compose worker |
 
 ## LiveKit Deployment Notes
 
-Local Compose runs LiveKit from the pinned `livekit/livekit-server:v1.13.4` image digest and mounts `livekit.yaml` for ports and RTC settings. `scripts/start-livekit.sh` writes the LiveKit key file inside the container from `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`; the credential value is never printed in logs. The local browser endpoint is configured by `NEXT_PUBLIC_LIVEKIT_URL`.
+Local Compose runs LiveKit from the pinned `livekit/livekit-server:v1.13.4` image digest and mounts `livekit.yaml` for ports and RTC settings. `scripts/start-livekit.sh` writes the LiveKit key file inside the container from `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`; the credential value is never printed in logs. When `LIVEKIT_WEBHOOK_URL` is set, the script appends a signed webhook target to the runtime config. The local browser endpoint is configured by `NEXT_PUBLIC_LIVEKIT_URL`.
 
 Production should expose LiveKit to clients through a TLS endpoint such as `wss://livekit.example.edu` and set `NEXT_PUBLIC_LIVEKIT_URL` to that WSS URL. Put the API/WebSocket port `7880` behind TLS termination, expose the configured WebRTC TCP/UDP ports at the edge, and enable TURN/TLS or TURN/UDP for restrictive networks. Do not run production with `--dev`; update `livekit.yaml` for public IP discovery, firewall rules, and TURN certificates before exposing it outside local development.
+
+Live streams are created as `STARTING` and become `LIVE` only after a signed LiveKit webhook confirms an active publishing host participant. The webhook endpoint is `/api/livekit/webhook`; it validates LiveKit's raw signed body before applying room, participant, and Egress events. Schedule reconciliation to repair missed webhooks and stale rooms:
+
+```bash
+DOTENV_CONFIG_PATH=.env.local npm run reconcile:livekit
+```
+
+Recording is enabled by `LIVEKIT_RECORDING_ENABLED=true`. Compose starts a pinned `livekit/egress:v1.9.1` worker with Redis and private MinIO application credentials in `EGRESS_CONFIG_BODY`; room-composite output is written under `recordings/`. Hosts can download, discard, retry, or publish finished recordings from the live room page. Publishing creates a normal queued `Video` that the media worker transcodes into protected playback assets.
 
 Run the LiveKit browser smoke test after the service is healthy:
 
