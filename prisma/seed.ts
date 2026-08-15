@@ -29,12 +29,21 @@ async function main() {
   
   await prisma.user.upsert({
     where: { email: 'admin@esi.dz' },
-    update: { name: 'Super Admin', password: hashedPassword, role: 'ADMIN', yearGroup: null },
+    update: {
+      name: 'Super Admin',
+      password: hashedPassword,
+      role: 'ADMIN',
+      yearGroup: null,
+      isActive: true,
+      disabledAt: null,
+      sessionVersion: { increment: 1 },
+    },
     create: {
       name: 'Super Admin',
       email: 'admin@esi.dz',
       password: hashedPassword,
       role: 'ADMIN',
+      isActive: true,
     },
   })
   console.log('Admin seeded successfully!')
@@ -45,14 +54,43 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: 'teacher@esi.dz' },
-    update: { name: 'Test Teacher', password: teacherPassword, role: 'TEACHER', yearGroup: null },
-    create: { name: 'Test Teacher', email: 'teacher@esi.dz', password: teacherPassword, role: 'TEACHER' },
+    update: {
+      name: 'Test Teacher',
+      password: teacherPassword,
+      role: 'TEACHER',
+      yearGroup: null,
+      isActive: true,
+      disabledAt: null,
+      sessionVersion: { increment: 1 },
+    },
+    create: {
+      name: 'Test Teacher',
+      email: 'teacher@esi.dz',
+      password: teacherPassword,
+      role: 'TEACHER',
+      isActive: true,
+    },
   })
 
   await prisma.user.upsert({
     where: { email: 'student@esi.dz' },
-    update: { name: 'Test Student', password: studentPassword, role: 'STUDENT', yearGroup: '1CP' },
-    create: { name: 'Test Student', email: 'student@esi.dz', password: studentPassword, role: 'STUDENT', yearGroup: '1CP' },
+    update: {
+      name: 'Test Student',
+      password: studentPassword,
+      role: 'STUDENT',
+      yearGroup: '1CP',
+      isActive: true,
+      disabledAt: null,
+      sessionVersion: { increment: 1 },
+    },
+    create: {
+      name: 'Test Student',
+      email: 'student@esi.dz',
+      password: studentPassword,
+      role: 'STUDENT',
+      yearGroup: '1CP',
+      isActive: true,
+    },
   })
 }
 

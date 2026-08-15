@@ -40,21 +40,38 @@ enum VideoStatus {
   DELETING
 }
 
-model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  password      String?
-  emailVerified DateTime?
-  image         String?
-  role          Role      @default(GUEST)
-  yearGroup     String? // e.g. "1CP", "2CP", etc.
+enum AuditEventType {
+  LOGIN
+  LOGOUT
+  SESSION_REVOKE
+  ROLE_CHANGE
+  USER_DISABLE
+  USER_CREATE
+  PASSWORD_RESET
+}
 
-  videos         Video[]         @relation("Uploader")
-  liveStreams    LiveStream[]    @relation("Host")
-  uploadSessions UploadSession[] @relation("UploadOwner")
-  accounts       Account[]
-  sessions       Session[]
+model User {
+  id             String    @id @default(cuid())
+  name           String?
+  email          String?   @unique
+  password       String?
+  emailVerified  DateTime?
+  image          String?
+  role           Role      @default(GUEST)
+  yearGroup      String? // e.g. "1CP", "2CP", etc.
+  isActive       Boolean   @default(true)
+  disabledAt     DateTime?
+  sessionVersion Int       @default(0)
+
+  videos              Video[]         @relation("Uploader")
+  liveStreams         LiveStream[]    @relation("Host")
+  uploadSessions      UploadSession[] @relation("UploadOwner")
+  accounts            Account[]
+  sessions            Session[]
+  auditEventsAuthored AuditEvent[]    @relation("AuditActor")
+  auditEventsSubject  AuditEvent[]    @relation("AuditSubject")
+
+  @@index([isActive, role])
 }
 
 model Module {
@@ -176,4 +193,20 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model AuditEvent {
+  id        String         @id @default(cuid())
+  type      AuditEventType
+  actorId   String?
+  subjectId String?
+  metadata  Json?
+  createdAt DateTime       @default(now())
+
+  actor   User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  subject User? @relation("AuditSubject", fields: [subjectId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, createdAt])
+  @@index([subjectId, createdAt])
+  @@index([type, createdAt])
 }
