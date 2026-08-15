@@ -1,10 +1,22 @@
 import { test, expect } from '@playwright/test';
-import { login } from './helpers';
+import { Role } from '@prisma/client';
+import { cleanupTestUsers, createTestUser, login } from './helpers';
 
 test.describe('Go Live Flow', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  const emails: string[] = [];
+
+  test.afterEach(async () => {
+    await cleanupTestUsers(emails.splice(0));
+  });
+
   test('teacher can configure a live stream', async ({ page }) => {
+    const teacher = await createTestUser(Role.TEACHER, 'live-teacher');
+    emails.push(teacher.email);
+
     // 1. Log in as teacher
-    await login(page, 'teacher@esi.dz', 'teacher');
+    await login(page, teacher.email, teacher.password);
 
     // 2. Go to Go Live page
     await page.goto('/live/new');

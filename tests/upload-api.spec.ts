@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test"
-import { login, logout } from "./helpers"
+import { Role } from "@prisma/client"
+import { cleanupTestUsers, createTestUser, login, logout } from "./helpers"
 
 const uploadPayload = {
   title: "API Upload Session",
@@ -15,13 +16,24 @@ const uploadPayload = {
 }
 
 test.describe("Upload API authorization", () => {
+  test.describe.configure({ mode: "serial" })
+
+  const emails: string[] = []
+
+  test.afterEach(async () => {
+    await cleanupTestUsers(emails.splice(0))
+  })
+
   test("anonymous users cannot initiate an upload", async ({ request }) => {
     const response = await request.post("/api/uploads", { data: uploadPayload })
     expect(response.status()).toBe(401)
   })
 
   test("students cannot initiate an upload", async ({ page }) => {
-    await login(page, "student@esi.dz", "student")
+    const student = await createTestUser(Role.STUDENT, "upload-api-student")
+    emails.push(student.email)
+
+    await login(page, student.email, student.password)
 
     const response = await page.request.post("/api/uploads", { data: uploadPayload })
     expect(response.status()).toBe(403)
@@ -29,20 +41,23 @@ test.describe("Upload API authorization", () => {
 
   test("a different signed-in user cannot complete an upload session", async ({ page }) => {
     let sessionId: string | null = null
+    const teacher = await createTestUser(Role.TEACHER, "upload-api-teacher")
+    const admin = await createTestUser(Role.ADMIN, "upload-api-admin")
+    emails.push(teacher.email, admin.email)
 
-    await login(page, "teacher@esi.dz", "teacher")
+    await login(page, teacher.email, teacher.password)
     const createResponse = await page.request.post("/api/uploads", { data: uploadPayload })
     expect(createResponse.status()).toBe(200)
     sessionId = ((await createResponse.json()) as { sessionId: string }).sessionId
 
     await logout(page)
-    await login(page, "admin@esi.dz", "admin")
+    await login(page, admin.email, admin.password)
 
     const completeResponse = await page.request.post(`/api/uploads/${sessionId}/complete`)
     expect(completeResponse.status()).toBe(403)
 
     await logout(page)
-    await login(page, "teacher@esi.dz", "teacher")
+    await login(page, teacher.email, teacher.password)
 
     const abortResponse = await page.request.delete(`/api/uploads/${sessionId}`)
     expect(abortResponse.status()).toBe(200)

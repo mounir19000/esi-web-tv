@@ -1,11 +1,23 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
-import { login } from './helpers';
+import { Role } from '@prisma/client';
+import { cleanupTestUsers, createTestUser, login } from './helpers';
 
 test.describe('Video Upload Flow', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  const emails: string[] = [];
+
+  test.afterEach(async () => {
+    await cleanupTestUsers(emails.splice(0));
+  });
+
   test('teacher can upload a video', async ({ page }) => {
+    const teacher = await createTestUser(Role.TEACHER, 'upload-teacher');
+    emails.push(teacher.email);
+
     // 1. Log in as teacher
-    await login(page, 'teacher@esi.dz', 'teacher');
+    await login(page, teacher.email, teacher.password);
 
     // 2. Go to upload page
     await page.goto('/dashboard/upload');
