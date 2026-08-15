@@ -57,7 +57,7 @@ MINIO_PORT="9000"
 MINIO_USE_SSL="false"
 MINIO_ROOT_USER="minioadmin"
 MINIO_ROOT_PASSWORD="minioadmin"
-NEXT_PUBLIC_MINIO_PUBLIC_URL="http://localhost:9000/esitv-videos"
+MEDIA_SIGNED_URL_TTL_SECONDS="60"
 ```
 
 Prepare the database and seed demo users:
@@ -120,7 +120,7 @@ The included Docker Compose file starts:
 
 ## Video Upload Notes
 
-Uploaded MP4 files are written to a temporary folder, processed with FFmpeg, and stored in MinIO. For production, move the processing work to a background queue such as BullMQ, a worker service, or a job runner on the VM.
+Uploaded MP4 files are written to a temporary folder, processed with FFmpeg, and stored in a private MinIO bucket. Playback and thumbnails are served through app authorization endpoints that issue short-lived signed URLs. For production, move the processing work to a background queue such as BullMQ, a worker service, or a job runner on the VM.
 
 Make sure FFmpeg is installed on the host that runs the Next.js server:
 
