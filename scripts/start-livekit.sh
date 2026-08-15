@@ -47,7 +47,39 @@ if [ ! -r "$config_path" ]; then
   exit 1
 fi
 
+runtime_config="$config_path"
+if [ -n "${LIVEKIT_WEBHOOK_URL:-}" ]; then
+  if contains_newline "$LIVEKIT_WEBHOOK_URL"; then
+    echo "LiveKit configuration error: LIVEKIT_WEBHOOK_URL must be a single-line value." >&2
+    exit 1
+  fi
+
+  case "$LIVEKIT_WEBHOOK_URL" in
+    http://*|https://*) ;;
+    *)
+      echo "LiveKit configuration error: LIVEKIT_WEBHOOK_URL must start with http:// or https://." >&2
+      exit 1
+      ;;
+  esac
+
+  case "$LIVEKIT_WEBHOOK_URL" in
+    *"'"*|*'"'*)
+      echo "LiveKit configuration error: LIVEKIT_WEBHOOK_URL must not contain quotes." >&2
+      exit 1
+      ;;
+  esac
+
+  runtime_config="${LIVEKIT_RUNTIME_CONFIG:-/tmp/livekit.runtime.yaml}"
+  cp "$config_path" "$runtime_config"
+  {
+    printf "\nwebhook:\n"
+    printf "  api_key: '%s'\n" "$LIVEKIT_API_KEY"
+    printf "  urls:\n"
+    printf "    - '%s'\n" "$LIVEKIT_WEBHOOK_URL"
+  } >> "$runtime_config"
+fi
+
 umask 077
 printf "%s: %s\n" "$LIVEKIT_API_KEY" "$LIVEKIT_API_SECRET" > "$key_file"
 
-exec /livekit-server --config "$config_path" --key-file "$key_file"
+exec /livekit-server --config "$runtime_config" --key-file "$key_file"

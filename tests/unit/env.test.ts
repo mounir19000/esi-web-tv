@@ -12,6 +12,13 @@ function baseEnv(overrides: RuntimeEnv = {}): RuntimeEnv {
     LIVEKIT_API_KEY: "test-livekit-key",
     LIVEKIT_API_SECRET: "test-livekit-secret-with-at-least-32-chars",
     NEXT_PUBLIC_LIVEKIT_URL: "ws://localhost:7880",
+    LIVEKIT_TOKEN_TTL_SECONDS: "600",
+    LIVEKIT_ANONYMOUS_TOKEN_TTL_SECONDS: "120",
+    LIVEKIT_ROOM_EMPTY_TIMEOUT_SECONDS: "600",
+    LIVEKIT_ROOM_DEPARTURE_TIMEOUT_SECONDS: "60",
+    LIVEKIT_MAX_PARTICIPANTS: "100",
+    LIVEKIT_PUBLIC_MAX_PARTICIPANTS: "50",
+    LIVEKIT_RECORDING_ENABLED: "false",
     MINIO_ENDPOINT: "localhost",
     MINIO_PORT: "9000",
     MINIO_USE_SSL: "false",
@@ -44,6 +51,9 @@ describe("loadAppConfig", () => {
     assert.equal(config.minio.secretKey, "test-minio-secret")
     assert.equal(config.minio.videoBucket, "esitv-videos")
     assert.equal(config.queue.mediaWorkerConcurrency, 1)
+    assert.equal(config.livekit.tokenTtlSeconds, 600)
+    assert.equal(config.livekit.anonymousTokenTtlSeconds, 120)
+    assert.equal(config.livekit.recordingEnabled, false)
   })
 
   it("fails production startup when APP_ENV is missing", () => {
@@ -61,6 +71,7 @@ describe("loadAppConfig", () => {
       LIVEKIT_API_KEY: "lk-prod-key",
       LIVEKIT_API_SECRET: "lk-prod-random-value-32-characters-minimum",
       NEXT_PUBLIC_LIVEKIT_URL: "wss://livekit.example.edu",
+      LIVEKIT_WEBHOOK_URL: "https://web-tv.example.edu/api/livekit/webhook",
       MINIO_ENDPOINT: "s3.example.edu",
       MINIO_PORT: "443",
       MINIO_USE_SSL: "true",
@@ -73,6 +84,7 @@ describe("loadAppConfig", () => {
     assert.equal(config.deploymentMode, "production")
     assert.equal(config.minio.useSSL, true)
     assert.equal(config.livekit.publicUrl, "wss://livekit.example.edu")
+    assert.equal(config.livekit.webhookUrl, "https://web-tv.example.edu/api/livekit/webhook")
   })
 
   it("fails clearly for each missing production variable", () => {
@@ -110,6 +122,7 @@ describe("loadAppConfig", () => {
       MINIO_ACCESS_KEY: "minioadmin",
       MINIO_SECRET_KEY: "minioadmin",
       MEDIA_WORKER_VERSION: "local-dev",
+      LIVEKIT_WEBHOOK_URL: "http://localhost:3000/api/livekit/webhook",
     })
 
     assert.throws(() => loadAppConfig(env), (error) => {
@@ -122,9 +135,22 @@ describe("loadAppConfig", () => {
       assert.match(error.message, /MINIO_SECRET_KEY/)
       assert.match(error.message, /NEXTAUTH_URL/)
       assert.match(error.message, /NEXT_PUBLIC_LIVEKIT_URL/)
+      assert.match(error.message, /LIVEKIT_WEBHOOK_URL/)
       assert.match(error.message, /ALLOW_DEMO_SEED/)
       return true
     })
+  })
+
+  it("rejects unsafe LiveKit lifecycle limits", () => {
+    assert.throws(
+      () => loadAppConfig(baseEnv({ LIVEKIT_ANONYMOUS_TOKEN_TTL_SECONDS: "601" })),
+      /LIVEKIT_ANONYMOUS_TOKEN_TTL_SECONDS/,
+    )
+
+    assert.throws(
+      () => loadAppConfig(baseEnv({ LIVEKIT_PUBLIC_MAX_PARTICIPANTS: "101" })),
+      /LIVEKIT_PUBLIC_MAX_PARTICIPANTS/,
+    )
   })
 
   it("allows demo seeding only in explicitly local or test deployments", () => {

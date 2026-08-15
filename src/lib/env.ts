@@ -20,6 +20,14 @@ export type AppConfig = {
     apiKey: string
     apiSecret: string
     publicUrl: string
+    webhookUrl: string | null
+    tokenTtlSeconds: number
+    anonymousTokenTtlSeconds: number
+    roomEmptyTimeoutSeconds: number
+    roomDepartureTimeoutSeconds: number
+    maxParticipants: number
+    publicMaxParticipants: number
+    recordingEnabled: boolean
   }
   minio: {
     endpoint: string
@@ -177,6 +185,24 @@ function parseUrl(env: RuntimeEnv, name: string, protocols: string[], issues: st
   return value
 }
 
+function parseOptionalUrl(env: RuntimeEnv, name: string, protocols: string[], issues: string[]) {
+  const value = readOptional(env, name)
+  if (!value) {
+    return null
+  }
+
+  try {
+    const url = new URL(value)
+    if (!protocols.includes(url.protocol)) {
+      issues.push(`${name} must use one of these protocols: ${protocols.join(", ")}.`)
+    }
+  } catch {
+    issues.push(`${name} must be a valid URL.`)
+  }
+
+  return value
+}
+
 function parseOptionalEmail(env: RuntimeEnv, name: string, issues: string[]) {
   const value = readOptional(env, name)
   if (!value) {
@@ -276,6 +302,9 @@ function rejectProductionOnly(
 
   rejectProductionLocalUrl(issues, "NEXTAUTH_URL", config.auth.url)
   rejectProductionLocalUrl(issues, "NEXT_PUBLIC_LIVEKIT_URL", config.livekit.publicUrl)
+  if (config.livekit.webhookUrl) {
+    rejectProductionLocalUrl(issues, "LIVEKIT_WEBHOOK_URL", config.livekit.webhookUrl)
+  }
 
   if (urlProtocol(config.auth.url) !== "https:") {
     issues.push("NEXTAUTH_URL must use https in production.")
@@ -306,6 +335,34 @@ export function loadAppConfig(env: RuntimeEnv = process.env): AppConfig {
   )
   const mediaWorkerConcurrency = parseInteger(env, "MEDIA_WORKER_CONCURRENCY", 1, 1, 64, issues)
   const allowDemoSeed = parseOptionalBoolean(env, "ALLOW_DEMO_SEED", false, issues)
+  const livekitTokenTtlSeconds = parseInteger(env, "LIVEKIT_TOKEN_TTL_SECONDS", 10 * 60, 60, 60 * 60, issues)
+  const livekitAnonymousTokenTtlSeconds = parseInteger(
+    env,
+    "LIVEKIT_ANONYMOUS_TOKEN_TTL_SECONDS",
+    2 * 60,
+    30,
+    15 * 60,
+    issues,
+  )
+  const livekitRoomEmptyTimeoutSeconds = parseInteger(
+    env,
+    "LIVEKIT_ROOM_EMPTY_TIMEOUT_SECONDS",
+    10 * 60,
+    60,
+    60 * 60,
+    issues,
+  )
+  const livekitRoomDepartureTimeoutSeconds = parseInteger(
+    env,
+    "LIVEKIT_ROOM_DEPARTURE_TIMEOUT_SECONDS",
+    60,
+    5,
+    10 * 60,
+    issues,
+  )
+  const livekitMaxParticipants = parseInteger(env, "LIVEKIT_MAX_PARTICIPANTS", 100, 1, 500, issues)
+  const livekitPublicMaxParticipants = parseInteger(env, "LIVEKIT_PUBLIC_MAX_PARTICIPANTS", 50, 1, 500, issues)
+  const livekitRecordingEnabled = parseOptionalBoolean(env, "LIVEKIT_RECORDING_ENABLED", false, issues)
 
   if (authSecret && authSecret.length < 32) {
     issues.push("AUTH_SECRET or NEXTAUTH_SECRET must be at least 32 characters.")
@@ -324,6 +381,14 @@ export function loadAppConfig(env: RuntimeEnv = process.env): AppConfig {
       apiKey: readRequired(env, "LIVEKIT_API_KEY", issues),
       apiSecret: readRequired(env, "LIVEKIT_API_SECRET", issues),
       publicUrl: parseUrl(env, "NEXT_PUBLIC_LIVEKIT_URL", ["ws:", "wss:"], issues),
+      webhookUrl: parseOptionalUrl(env, "LIVEKIT_WEBHOOK_URL", ["http:", "https:"], issues),
+      tokenTtlSeconds: livekitTokenTtlSeconds,
+      anonymousTokenTtlSeconds: livekitAnonymousTokenTtlSeconds,
+      roomEmptyTimeoutSeconds: livekitRoomEmptyTimeoutSeconds,
+      roomDepartureTimeoutSeconds: livekitRoomDepartureTimeoutSeconds,
+      maxParticipants: livekitMaxParticipants,
+      publicMaxParticipants: livekitPublicMaxParticipants,
+      recordingEnabled: livekitRecordingEnabled,
     },
     minio: {
       endpoint: readRequired(env, "MINIO_ENDPOINT", issues),
@@ -353,6 +418,14 @@ export function loadAppConfig(env: RuntimeEnv = process.env): AppConfig {
 
   if (configWithoutMode.livekit.apiSecret && configWithoutMode.livekit.apiSecret.length < 32) {
     issues.push("LIVEKIT_API_SECRET must be at least 32 characters.")
+  }
+
+  if (configWithoutMode.livekit.anonymousTokenTtlSeconds > configWithoutMode.livekit.tokenTtlSeconds) {
+    issues.push("LIVEKIT_ANONYMOUS_TOKEN_TTL_SECONDS must be less than or equal to LIVEKIT_TOKEN_TTL_SECONDS.")
+  }
+
+  if (configWithoutMode.livekit.publicMaxParticipants > configWithoutMode.livekit.maxParticipants) {
+    issues.push("LIVEKIT_PUBLIC_MAX_PARTICIPANTS must be less than or equal to LIVEKIT_MAX_PARTICIPANTS.")
   }
 
   if (configWithoutMode.minio.videoBucket && !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(configWithoutMode.minio.videoBucket)) {
