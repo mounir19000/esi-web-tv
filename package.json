@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:unit": "tsx --test tests/unit/*.test.ts",
+    "test:livekit-smoke": "tsx scripts/livekit-smoke.ts",
     "worker:media": "tsx src/workers/media-worker.ts"
   },
   "dependencies": {
