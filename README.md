@@ -35,12 +35,6 @@ Install dependencies:
 npm install
 ```
 
-Start the local services:
-
-```bash
-docker compose up -d
-```
-
 Create a `.env` file:
 
 ```bash
@@ -49,7 +43,7 @@ NEXTAUTH_SECRET="replace-with-a-long-random-secret"
 NEXTAUTH_URL="http://localhost:3000"
 
 LIVEKIT_API_KEY="devkey"
-LIVEKIT_API_SECRET="secret"
+LIVEKIT_API_SECRET="dev-secret-key-change-me-32-chars-minimum"
 NEXT_PUBLIC_LIVEKIT_URL="ws://localhost:7880"
 
 MINIO_ENDPOINT="localhost"
@@ -62,6 +56,12 @@ MEDIA_SIGNED_URL_TTL_SECONDS="60"
 REDIS_URL="redis://localhost:6379"
 MEDIA_WORKER_VERSION="local-dev"
 MEDIA_WORKER_CONCURRENCY="1"
+```
+
+Start the local services:
+
+```bash
+docker compose up -d
 ```
 
 Prepare the database and seed demo users:
@@ -108,6 +108,7 @@ npm run worker:media
 npm run build
 npm run lint
 npm run test:unit
+npm run test:livekit-smoke
 npx playwright test
 npx prisma db seed
 ```
@@ -125,6 +126,18 @@ The included Docker Compose file starts:
 | Redis | `localhost:6379` |
 | Media worker | `npm run worker:media` |
 | LiveKit | `ws://localhost:7880` |
+
+## LiveKit Deployment Notes
+
+Local Compose runs LiveKit from the pinned `livekit/livekit-server:v1.13.4` image digest and mounts `livekit.yaml` for ports and RTC settings. `scripts/start-livekit.sh` writes the LiveKit key file inside the container from `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`; the secret is never printed in logs. The local browser endpoint is `NEXT_PUBLIC_LIVEKIT_URL=ws://localhost:7880`.
+
+Production should expose LiveKit to clients through a TLS endpoint such as `wss://livekit.example.edu` and set `NEXT_PUBLIC_LIVEKIT_URL` to that WSS URL. Put the API/WebSocket port `7880` behind TLS termination, expose the configured WebRTC TCP/UDP ports at the edge, and enable TURN/TLS or TURN/UDP for restrictive networks. Do not run production with `--dev`; update `livekit.yaml` for public IP discovery, firewall rules, and TURN certificates before exposing it outside local development.
+
+Run the LiveKit browser smoke test after the service is healthy:
+
+```bash
+npm run test:livekit-smoke
+```
 
 ## Video Upload Notes
 
