@@ -105,11 +105,15 @@ Validation, rate limits, and lifecycle controls are documented in [Validation An
 npm run dev
 npm run worker:media
 npm run build
+npm run format:check
 npm run lint
+npm run typecheck
 npm run test:unit
+npm run test:integration
+npm run test:e2e
+npm run audit
 npm run test:livekit-smoke
 npm run reconcile:livekit
-npx playwright test
 DOTENV_CONFIG_PATH=.env.local npx prisma migrate deploy
 DOTENV_CONFIG_PATH=.env.local npx prisma db seed
 DOTENV_CONFIG_PATH=.env.local npm run bootstrap:admin
@@ -187,18 +191,28 @@ For production, store `DATABASE_URL`, `AUTH_SECRET`, LiveKit credentials, MinIO 
 
 ## Testing
 
+Run the quick local suites:
+
+```bash
+npm run typecheck
+npm run test
+```
+
 Run the full browser test suite:
 
 ```bash
-npx playwright test
+npm run test:e2e
 ```
+
+The Playwright suite creates a disposable `esitv_e2e_*` database, a disposable `esitv-e2e-*` MinIO bucket, applies migrations, seeds deterministic modules, and removes those resources in teardown. It uses port `3100` by default so it cannot accidentally reuse a developer server on `3000`.
 
 The tests cover:
 
-- Teacher login and dashboard access
-- Student restriction from upload pages
-- Teacher video upload flow
-- Teacher live stream creation flow
+- Teacher login, dashboard access, and student restrictions
+- Upload API authorization and validation failures
+- Browser upload through a real multipart object, backend processing to `READY`, generated HLS/thumbnail assets, and protected media authorization
+- Live stream creation backed by a LiveKit room and token
+- Session revocation and already-open-tab denial paths
 
 ## Repository
 

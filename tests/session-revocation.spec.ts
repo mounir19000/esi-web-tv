@@ -1,7 +1,7 @@
-import "dotenv/config"
+import "./e2e-env"
 
 import { test, expect } from "@playwright/test"
-import { AuditEventType, ProvisioningStatus, Role } from "@prisma/client"
+import { AuditEventType, ProvisioningStatus, Role, StreamStatus } from "@prisma/client"
 import bcrypt from "bcryptjs"
 import { randomUUID } from "node:crypto"
 import { disableUserAccount, revokeUserSessions, updateUserRoleAndRevokeSessions } from "../src/lib/account-security"
@@ -80,7 +80,11 @@ async function createLocalUser(role: Role, label: string, yearGroup: string | nu
     })
   }
 
-  return { ...user, password }
+  if (!user.email) {
+    throw new Error("Test user was created without an email")
+  }
+
+  return { id: user.id, email: user.email, password }
 }
 
 test.describe("session revocation", () => {
@@ -100,6 +104,7 @@ test.describe("session revocation", () => {
         description: "A private stream owned by the soon-disabled teacher.",
         isLive: true,
         isPublic: false,
+        status: StreamStatus.STARTING,
         hostId: teacher.id,
       },
       select: { streamKey: true },

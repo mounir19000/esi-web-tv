@@ -5,6 +5,7 @@ import {
   canManageUserContent,
   canPublishToAudience,
   canViewScopedContent,
+  visibleLiveStreamWhere,
   visibleVideoWhere,
 } from "../../src/lib/content-access"
 
@@ -91,6 +92,20 @@ describe("visibleVideoWhere", () => {
 })
 
 describe("canViewScopedContent", () => {
+  const approvedStudent = {
+    id: "student-1",
+    role: Role.STUDENT,
+    provisioningStatus: ProvisioningStatus.APPROVED,
+    moduleEnrollments: [{ moduleId: "module-1" }],
+    cohortMemberships: [{ cohortId: "cohort-1" }],
+  }
+  const approvedTeacher = {
+    id: "teacher-1",
+    role: Role.TEACHER,
+    provisioningStatus: ProvisioningStatus.APPROVED,
+    teacherAssignments: [{ moduleId: "module-1", canPublish: true, canManage: true }],
+  }
+
   it("keeps ESI-wide private content for approved signed-in users only", () => {
     const content = { isPublic: false, audience: AudienceType.ESI }
     assert.equal(canViewScopedContent(content, null), false)
@@ -131,6 +146,106 @@ describe("canViewScopedContent", () => {
       true,
     )
   })
+
+  it("covers every explicit audience branch", () => {
+    const cases: Array<{
+      name: string
+      content: Parameters<typeof canViewScopedContent>[0]
+      viewer: Parameters<typeof canViewScopedContent>[1]
+      expected: boolean
+    }> = [
+      {
+        name: "visitors can view public content",
+        content: { isPublic: true, audience: AudienceType.PUBLIC },
+        viewer: null,
+        expected: true,
+      },
+      {
+        name: "visitors cannot view ESI content",
+        content: { isPublic: false, audience: AudienceType.ESI },
+        viewer: null,
+        expected: false,
+      },
+      {
+        name: "approved students can view ESI content",
+        content: { isPublic: false, audience: AudienceType.ESI },
+        viewer: approvedStudent,
+        expected: true,
+      },
+      {
+        name: "pending users cannot view ESI content",
+        content: { isPublic: false, audience: AudienceType.ESI },
+        viewer: { id: "guest-1", role: Role.GUEST, provisioningStatus: ProvisioningStatus.PENDING },
+        expected: false,
+      },
+      {
+        name: "students can view enrolled module content",
+        content: { isPublic: false, audience: AudienceType.MODULE, moduleId: "module-1" },
+        viewer: approvedStudent,
+        expected: true,
+      },
+      {
+        name: "students cannot view unrelated module content",
+        content: { isPublic: false, audience: AudienceType.MODULE, moduleId: "module-2" },
+        viewer: approvedStudent,
+        expected: false,
+      },
+      {
+        name: "assigned teachers can view module content",
+        content: { isPublic: false, audience: AudienceType.MODULE, moduleId: "module-1" },
+        viewer: approvedTeacher,
+        expected: true,
+      },
+      {
+        name: "cohort members can view cohort content",
+        content: { isPublic: false, audience: AudienceType.COHORT, cohortId: "cohort-1" },
+        viewer: approvedStudent,
+        expected: true,
+      },
+      {
+        name: "nonmembers cannot view cohort content",
+        content: { isPublic: false, audience: AudienceType.COHORT, cohortId: "cohort-2" },
+        viewer: approvedStudent,
+        expected: false,
+      },
+      {
+        name: "selected users can view selected-user content",
+        content: {
+          isPublic: false,
+          audience: AudienceType.SELECTED_USERS,
+          audienceUsers: [{ userId: "student-1" }],
+        },
+        viewer: approvedStudent,
+        expected: true,
+      },
+      {
+        name: "unselected users cannot view selected-user content",
+        content: {
+          isPublic: false,
+          audience: AudienceType.SELECTED_USERS,
+          audienceUsers: [{ userId: "student-2" }],
+        },
+        viewer: approvedStudent,
+        expected: false,
+      },
+      {
+        name: "owners can view their own private content",
+        content: { isPublic: false, audience: AudienceType.MODULE, moduleId: "module-2", uploaderId: "teacher-1" },
+        viewer: approvedTeacher,
+        expected: true,
+      },
+      {
+        name: "admins can view any private content",
+        content: { isPublic: false, audience: AudienceType.SELECTED_USERS },
+        viewer: { id: "admin-1", role: Role.ADMIN, provisioningStatus: ProvisioningStatus.APPROVED },
+        expected: true,
+      },
+    ]
+
+    for (const testCase of cases) {
+      assert.equal(canViewScopedContent(testCase.content, testCase.viewer), testCase.expected, testCase.name)
+    }
+  })
 })
 
 describe("canPublishToAudience", () => {
@@ -145,6 +260,65 @@ describe("canPublishToAudience", () => {
     assert.equal(canPublishToAudience(teacher, { audience: AudienceType.PUBLIC }), true)
     assert.equal(canPublishToAudience(teacher, { audience: AudienceType.MODULE, moduleId: "module-1" }), true)
     assert.equal(canPublishToAudience(teacher, { audience: AudienceType.MODULE, moduleId: "module-2" }), false)
+  })
+
+  it("denies pending users, students, cohorts, and selected-user publishing", () => {
+    assert.equal(
+      canPublishToAudience(
+        { id: "teacher-1", role: Role.TEACHER, provisioningStatus: ProvisioningStatus.PENDING },
+        { audience: AudienceType.PUBLIC },
+      ),
+      false,
+    )
+    assert.equal(
+      canPublishToAudience(
+        { id: "student-1", role: Role.STUDENT, provisioningStatus: ProvisioningStatus.APPROVED },
+        { audience: AudienceType.PUBLIC },
+      ),
+      false,
+    )
+    assert.equal(
+      canPublishToAudience(
+        { id: "teacher-1", role: Role.TEACHER, provisioningStatus: ProvisioningStatus.APPROVED },
+        { audience: AudienceType.COHORT, cohortId: "cohort-1" },
+      ),
+      false,
+    )
+    assert.equal(
+      canPublishToAudience(
+        { id: "teacher-1", role: Role.TEACHER, provisioningStatus: ProvisioningStatus.APPROVED },
+        { audience: AudienceType.SELECTED_USERS },
+      ),
+      false,
+    )
+  })
+})
+
+describe("visibleLiveStreamWhere", () => {
+  it("uses the same explicit audience predicates for live streams", () => {
+    assert.deepEqual(
+      visibleLiveStreamWhere({
+        id: "student-1",
+        role: Role.STUDENT,
+        provisioningStatus: ProvisioningStatus.APPROVED,
+        moduleEnrollments: [{ moduleId: "module-1" }],
+        cohortMemberships: [{ cohortId: "cohort-1" }],
+      }),
+      {
+        OR: [
+          { audience: AudienceType.PUBLIC },
+          { isPublic: true },
+          { hostId: "student-1" },
+          { audience: AudienceType.ESI },
+          { audience: AudienceType.MODULE, moduleId: { in: ["module-1"] } },
+          { audience: AudienceType.COHORT, cohortId: { in: ["cohort-1"] } },
+          {
+            audience: AudienceType.SELECTED_USERS,
+            liveStreamAudienceUsers: { some: { userId: "student-1" } },
+          },
+        ],
+      },
+    )
   })
 })
 

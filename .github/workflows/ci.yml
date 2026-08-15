@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      E2E_RUN_ID: ci-${{ github.run_id }}-${{ github.run_attempt }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prepare local environment
+        run: cp .env.local.example .env
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Start integration services
+        run: docker compose --env-file .env.local.example up -d db redis minio minio-init livekit
+
+      - name: Show service status
+        run: docker compose --env-file .env.local.example ps
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Integration tests
+        run: npm run test:integration
+
+      - name: End-to-end tests
+        run: npm run test:e2e
+
+      - name: Build
+        run: npm run build
+
+      - name: Dependency audit
+        run: npm run audit
+
+      - name: Capture Docker logs
+        if: failure()
+        run: docker compose --env-file .env.local.example logs --no-color > docker-compose.log
+
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-diagnostics
+          path: |
+            docker-compose.log
+            playwright-report/
+            test-results/
+
+      - name: Stop services
+        if: always()
+        run: docker compose --env-file .env.local.example down -v

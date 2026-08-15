@@ -1,7 +1,10 @@
+import "./e2e-env"
+
 import { expect, type Page } from "@playwright/test"
-import { ProvisioningStatus, Role } from "@prisma/client"
+import { MediaAssetType, ProvisioningStatus, Role, VideoStatus } from "@prisma/client"
 import bcrypt from "bcryptjs"
 import { randomUUID } from "node:crypto"
+import { processMediaJob } from "../src/lib/media-processing"
 import prisma from "../src/lib/prisma"
 
 export const e2ePassword = "E2eTestPassword1!"
@@ -57,10 +60,18 @@ export async function createTestUser(role: Role, label: string, yearGroup: strin
     })
   }
 
-  return { ...user, password: e2ePassword }
+  if (!user.email) {
+    throw new Error("Test user was created without an email")
+  }
+
+  return { id: user.id, name: user.name, email: user.email, password: e2ePassword }
 }
 
 export async function cleanupTestUsers(emails: string[]) {
+  if (emails.length === 0) {
+    return
+  }
+
   const users = await prisma.user.findMany({
     where: { email: { in: emails } },
     select: { id: true },
@@ -82,6 +93,88 @@ export async function cleanupTestUsers(emails: string[]) {
   await prisma.session.deleteMany({ where: { userId: { in: userIds } } })
   await prisma.account.deleteMany({ where: { userId: { in: userIds } } })
   await prisma.user.deleteMany({ where: { id: { in: userIds } } })
+}
+
+export async function getSeededModule(yearGroup = "1CP") {
+  const seededModule = await prisma.module.findFirst({
+    where: { yearGroup },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, yearGroup: true },
+  })
+
+  if (!seededModule) {
+    throw new Error(`Expected seeded ${yearGroup} module to exist`)
+  }
+
+  return seededModule
+}
+
+export async function waitForVideoByTitle(title: string, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs
+  let lastVideo = null
+
+  while (Date.now() < deadline) {
+    const video = await prisma.video.findFirst({
+      where: { title },
+      orderBy: { createdAt: "desc" },
+      include: {
+        mediaAssets: true,
+        variants: true,
+      },
+    })
+    if (video) {
+      return video
+    }
+    lastVideo = video
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+
+  throw new Error(`Timed out waiting for video "${title}" to be created: ${lastVideo}`)
+}
+
+export async function processVideoToReady(videoId: string) {
+  const video = await prisma.video.findUnique({
+    where: { id: videoId },
+    select: { id: true, processingVersion: true, status: true },
+  })
+
+  if (!video) {
+    throw new Error(`Video ${videoId} was not found`)
+  }
+
+  if (video.status !== VideoStatus.PENDING) {
+    throw new Error(`Expected ${videoId} to be pending before processing, got ${video.status}`)
+  }
+
+  await processMediaJob(
+    { videoId: video.id, processingVersion: video.processingVersion },
+    { attempt: 1, maxAttempts: 3 },
+  )
+
+  const readyVideo = await prisma.video.findUnique({
+    where: { id: video.id },
+    include: { mediaAssets: true, variants: true },
+  })
+
+  if (!readyVideo) {
+    throw new Error(`Video ${videoId} disappeared after processing`)
+  }
+
+  expect(readyVideo.status).toBe(VideoStatus.READY)
+  expect(readyVideo.url).toContain(`/hls/master.m3u8`)
+  expect(readyVideo.thumbnailUrl).toContain("thumbnails/")
+  expect(readyVideo.variants.length).toBeGreaterThan(0)
+  expect(readyVideo.mediaAssets.map((asset) => asset.type)).toEqual(
+    expect.arrayContaining([
+      MediaAssetType.SOURCE,
+      MediaAssetType.HLS_MASTER,
+      MediaAssetType.HLS_VARIANT_PLAYLIST,
+      MediaAssetType.HLS_SEGMENT,
+      MediaAssetType.THUMBNAIL,
+    ]),
+  )
+
+  return readyVideo
 }
 
 export async function login(page: Page, email: string, password: string) {
