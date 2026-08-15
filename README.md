@@ -97,6 +97,7 @@ Only `@esi.dz` email addresses are accepted.
 | Admin | Can manage users and access all content |
 
 Detailed audience semantics are documented in [Audience Policies](docs/audience-policies.md).
+Validation, rate limits, and lifecycle controls are documented in [Validation And Management Workflows](docs/management-workflows.md).
 
 ## Useful Commands
 
