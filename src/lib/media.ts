@@ -53,6 +53,11 @@ export function resolveStoredObjectKey(storedObject?: string | null) {
     return null
   }
 
+  const schemeMatch = rawValue.match(/^([a-z][a-z0-9+.-]*):/i)
+  if (schemeMatch && !/^https?:\/\//i.test(rawValue)) {
+    return null
+  }
+
   let objectKey = rawValue
   if (/^https?:\/\//i.test(rawValue)) {
     try {
