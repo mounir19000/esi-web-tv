@@ -1,10 +1,12 @@
 import type { Metadata } from "next"
 import Image from "next/image"
 import Link from "next/link"
+import type { Prisma } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { visibleLiveStreamWhere, visibleVideoWhere } from "@/lib/content-access"
 import { LiveStreamCard, VideoCard } from "@/components/ContentCards"
 import { getCurrentUser } from "@/lib/current-user"
+import { andWhere, liveStreamCardSelect, videoCardSelect } from "@/lib/listing-queries"
 
 export const dynamic = "force-dynamic"
 
@@ -14,21 +16,22 @@ export const metadata: Metadata = {
 
 export default async function Home() {
   const viewer = await getCurrentUser()
+  const visibleVideos = visibleVideoWhere(viewer)
 
   const [liveStreams, videos, videoCount, moduleCount] = await Promise.all([
     prisma.liveStream.findMany({
-      where: { isLive: true, ...visibleLiveStreamWhere(viewer) },
-      orderBy: { startedAt: "desc" },
+      where: andWhere<Prisma.LiveStreamWhereInput>([{ isLive: true }, visibleLiveStreamWhere(viewer)]),
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 3,
-      include: { host: true, module: true },
+      select: liveStreamCardSelect,
     }),
     prisma.video.findMany({
-      where: visibleVideoWhere(viewer),
-      orderBy: { createdAt: "desc" },
+      where: visibleVideos,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 4,
-      include: { uploader: true, module: true },
+      select: videoCardSelect,
     }),
-    prisma.video.count({ where: visibleVideoWhere(viewer) }),
+    prisma.video.count({ where: visibleVideos }),
     prisma.module.count(),
   ])
 

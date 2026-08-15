@@ -1,42 +1,8 @@
 /* eslint-disable @next/next/no-img-element */
 
 import Link from "next/link"
+import type { LiveStreamCardData, VideoCardData } from "@/lib/listing-queries"
 import { getVideoThumbnailUrl } from "@/lib/media"
-
-type VideoCardData = {
-  id: string
-  title: string
-  description: string | null
-  type: string
-  isPublic: boolean
-  audience?: string
-  thumbnailUrl: string | null
-  createdAt: Date
-  uploader: {
-    name: string | null
-  }
-  module: {
-    name: string
-    yearGroup: string
-  } | null
-}
-
-type LiveCardData = {
-  streamKey: string
-  title: string
-  description: string | null
-  isPublic: boolean
-  audience?: string
-  status?: string
-  startedAt: Date | null
-  host: {
-    name: string | null
-  }
-  module: {
-    name: string
-    yearGroup: string
-  } | null
-}
 
 function initials(name?: string | null) {
   return name?.trim().charAt(0).toUpperCase() || "E"
@@ -107,7 +73,7 @@ export function VideoCard({ video }: { video: VideoCardData }) {
   )
 }
 
-export function LiveStreamCard({ stream }: { stream: LiveCardData }) {
+export function LiveStreamCard({ stream }: { stream: LiveStreamCardData }) {
   const statusLabel = stream.status
     ? stream.status.charAt(0) + stream.status.slice(1).toLowerCase()
     : "Live"

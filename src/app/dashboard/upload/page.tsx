@@ -4,6 +4,7 @@ import { ProvisioningStatus } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { UploadVideoForm } from "@/components/UploadVideoForm"
 import { getCurrentUser } from "@/lib/current-user"
+import { moduleOptionSelect, paginationLimits } from "@/lib/listing-queries"
 
 export const dynamic = "force-dynamic"
 
@@ -24,10 +25,15 @@ export default async function UploadVideoPage() {
   }
 
   const assignedModuleIds = user.teacherAssignments.map((assignment) => assignment.moduleId)
-  const modules = await prisma.module.findMany({
+  const moduleLimit = paginationLimits.modules.maxSize
+  const moduleRows = await prisma.module.findMany({
     where: user.role === "ADMIN" ? {} : { id: { in: assignedModuleIds } },
     orderBy: [{ yearGroup: "asc" }, { name: "asc" }],
+    take: moduleLimit + 1,
+    select: moduleOptionSelect,
   })
+  const modules = moduleRows.slice(0, moduleLimit)
+  const modulesOverflow = moduleRows.length > moduleLimit
 
   return (
     <main className="page-narrow">
@@ -40,6 +46,9 @@ export default async function UploadVideoPage() {
           </div>
         </div>
 
+        {modulesOverflow && (
+          <p className="field-hint">Showing the first {modules.length} modules.</p>
+        )}
         <UploadVideoForm modules={modules} />
       </section>
     </main>

@@ -540,6 +540,18 @@ video {
   gap: 16px;
 }
 
+.filter-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+  margin-top: 18px;
+}
+
+.filter-form .field {
+  flex: 1 1 180px;
+}
+
 .field {
   display: grid;
   gap: 7px;
@@ -683,6 +695,12 @@ video {
 .list {
   display: grid;
   gap: 10px;
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
 }
 
 .list-item {
