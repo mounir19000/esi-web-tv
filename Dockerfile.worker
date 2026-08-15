@@ -1,15 +1,43 @@
-FROM node:24-bookworm-slim AS deps
+# syntax=docker/dockerfile:1.7
 
+ARG NODE_IMAGE=node:22-bookworm-slim
+
+FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ffmpeg openssl ca-certificates \
+  && apt-get install -y --no-install-recommends ca-certificates ffmpeg openssl \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json ./
 RUN npm ci
 
-COPY . .
+COPY prisma ./prisma
 RUN npx prisma generate
 
+FROM ${NODE_IMAGE} AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production \
+  NEXT_TELEMETRY_DISABLED=1
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates dumb-init ffmpeg openssl \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY --from=deps --chown=node:node /app/node_modules ./node_modules
+COPY --from=deps --chown=node:node /app/package.json /app/package-lock.json ./
+COPY --from=deps --chown=node:node /app/node_modules/.prisma ./node_modules/.prisma
+COPY --chown=node:node prisma ./prisma
+COPY --chown=node:node scripts ./scripts
+COPY --chown=node:node src ./src
+COPY --chown=node:node tsconfig.json ./
+
+USER node
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=45s --retries=3 \
+  CMD node scripts/healthcheck-worker.mjs
+
+ENTRYPOINT ["dumb-init", "--"]
 CMD ["npm", "run", "worker:media"]

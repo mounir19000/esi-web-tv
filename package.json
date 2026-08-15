@@ -19,6 +19,7 @@
     "reconcile:livekit": "tsx scripts/reconcile-livekit.ts",
     "db:seed-listing-fixtures": "tsx scripts/seed-listing-fixtures.ts",
     "db:explain-listings": "tsx scripts/explain-listing-queries.ts",
+    "ops:prod-config": "docker compose --env-file .env.production.example -f compose.prod.yml config --quiet",
     "bootstrap:admin": "tsx scripts/bootstrap-admin.ts",
     "worker:media": "tsx src/workers/media-worker.ts"
   },

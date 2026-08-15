@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.local.example
+!.env.production.example
+.git
+.github
+.next
+coverage
+docker-compose*.yml
+node_modules
+npm-debug.log*
+playwright-report
+test-results
+backups

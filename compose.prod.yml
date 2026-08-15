@@ -1,0 +1,370 @@
+name: esi-web-tv-prod
+
+x-app-environment: &app-environment
+  APP_ENV: production
+  ALLOW_DEMO_SEED: "false"
+  DATABASE_URL: postgresql://${POSTGRES_USER:?Set POSTGRES_USER}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?Set POSTGRES_DB}?schema=public
+  AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET}
+  NEXTAUTH_URL: https://${APP_DOMAIN:?Set APP_DOMAIN}
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY}
+  LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET}
+  NEXT_PUBLIC_LIVEKIT_URL: wss://${LIVEKIT_DOMAIN:?Set LIVEKIT_DOMAIN}
+  LIVEKIT_WEBHOOK_URL: https://${APP_DOMAIN:?Set APP_DOMAIN}/api/livekit/webhook
+  LIVEKIT_TOKEN_TTL_SECONDS: ${LIVEKIT_TOKEN_TTL_SECONDS:-600}
+  LIVEKIT_ANONYMOUS_TOKEN_TTL_SECONDS: ${LIVEKIT_ANONYMOUS_TOKEN_TTL_SECONDS:-120}
+  LIVEKIT_ROOM_EMPTY_TIMEOUT_SECONDS: ${LIVEKIT_ROOM_EMPTY_TIMEOUT_SECONDS:-600}
+  LIVEKIT_ROOM_DEPARTURE_TIMEOUT_SECONDS: ${LIVEKIT_ROOM_DEPARTURE_TIMEOUT_SECONDS:-60}
+  LIVEKIT_MAX_PARTICIPANTS: ${LIVEKIT_MAX_PARTICIPANTS:-100}
+  LIVEKIT_PUBLIC_MAX_PARTICIPANTS: ${LIVEKIT_PUBLIC_MAX_PARTICIPANTS:-50}
+  LIVEKIT_RECORDING_ENABLED: ${LIVEKIT_RECORDING_ENABLED:-true}
+  MINIO_ENDPOINT: ${S3_DOMAIN:?Set S3_DOMAIN}
+  MINIO_PORT: "443"
+  MINIO_USE_SSL: "true"
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?Set MINIO_ACCESS_KEY}
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?Set MINIO_SECRET_KEY}
+  MINIO_VIDEO_BUCKET: ${MINIO_VIDEO_BUCKET:?Set MINIO_VIDEO_BUCKET}
+  REDIS_URL: redis://redis:6379
+  MEDIA_SIGNED_URL_TTL_SECONDS: ${MEDIA_SIGNED_URL_TTL_SECONDS:-60}
+  MEDIA_MAX_DURATION_SECONDS: ${MEDIA_MAX_DURATION_SECONDS:-14400}
+  MEDIA_MAX_FRAME_PIXELS: ${MEDIA_MAX_FRAME_PIXELS:-8294400}
+  MEDIA_FFMPEG_TIMEOUT_SECONDS: ${MEDIA_FFMPEG_TIMEOUT_SECONDS:-3600}
+  MEDIA_FFMPEG_THREADS: ${MEDIA_FFMPEG_THREADS:-2}
+  MEDIA_HLS_SEGMENT_SECONDS: ${MEDIA_HLS_SEGMENT_SECONDS:-6}
+  MEDIA_WORKER_VERSION: ${IMAGE_TAG:?Set IMAGE_TAG}
+  MEDIA_WORKER_CONCURRENCY: ${MEDIA_WORKER_CONCURRENCY:-2}
+  BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+  BOOTSTRAP_ADMIN_NAME: ${BOOTSTRAP_ADMIN_NAME:-Platform Admin}
+  BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+  METRICS_BEARER_TOKEN: ${METRICS_BEARER_TOKEN:-}
+
+x-service-limits: &service-limits
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "50m"
+      max-file: "5"
+  networks:
+    - internal
+
+services:
+  caddy:
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL}
+      APP_DOMAIN: ${APP_DOMAIN:?Set APP_DOMAIN}
+      LIVEKIT_DOMAIN: ${LIVEKIT_DOMAIN:?Set LIVEKIT_DOMAIN}
+      S3_DOMAIN: ${S3_DOMAIN:?Set S3_DOMAIN}
+      UPLOAD_MAX_BODY_SIZE: ${UPLOAD_MAX_BODY_SIZE:-16GB}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_started
+      livekit:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - edge
+      - internal
+    cpus: "0.50"
+    mem_limit: 256m
+    pids_limit: 128
+
+  app:
+    <<: *service-limits
+    image: ${APP_IMAGE:-esi-web-tv-app}:${IMAGE_TAG:?Set IMAGE_TAG}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NODE_IMAGE: node:22-bookworm-slim
+    environment:
+      <<: *app-environment
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=256m
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/ready').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    cpus: "1.00"
+    mem_limit: 768m
+    pids_limit: 256
+
+  media-worker:
+    <<: *service-limits
+    image: ${WORKER_IMAGE:-esi-web-tv-worker}:${IMAGE_TAG:?Set IMAGE_TAG}
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+      args:
+        NODE_IMAGE: node:22-bookworm-slim
+    environment:
+      <<: *app-environment
+      DATABASE_URL: postgresql://${POSTGRES_USER:?Set POSTGRES_USER}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?Set POSTGRES_DB}?schema=public
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_USE_SSL: "false"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=${MEDIA_WORKER_TMP_SIZE:-12g}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    cpus: ${MEDIA_WORKER_CPUS:-2.00}
+    mem_limit: ${MEDIA_WORKER_MEMORY:-4g}
+    pids_limit: 384
+
+  migrate:
+    <<: *service-limits
+    image: ${WORKER_IMAGE:-esi-web-tv-worker}:${IMAGE_TAG:?Set IMAGE_TAG}
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+      args:
+        NODE_IMAGE: node:22-bookworm-slim
+    profiles:
+      - maintenance
+    restart: "no"
+    command: ["npx", "prisma", "migrate", "deploy"]
+    environment:
+      <<: *app-environment
+      DATABASE_URL: postgresql://${POSTGRES_USER:?Set POSTGRES_USER}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?Set POSTGRES_DB}?schema=public
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_USE_SSL: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    cpus: "0.50"
+    mem_limit: 512m
+    pids_limit: 128
+
+  bootstrap-admin:
+    <<: *service-limits
+    image: ${WORKER_IMAGE:-esi-web-tv-worker}:${IMAGE_TAG:?Set IMAGE_TAG}
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+      args:
+        NODE_IMAGE: node:22-bookworm-slim
+    profiles:
+      - maintenance
+    restart: "no"
+    command: ["npm", "run", "bootstrap:admin"]
+    environment:
+      <<: *app-environment
+      DATABASE_URL: postgresql://${POSTGRES_USER:?Set POSTGRES_USER}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?Set POSTGRES_DB}?schema=public
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_USE_SSL: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    cpus: "0.50"
+    mem_limit: 512m
+    pids_limit: 128
+
+  db:
+    <<: *service-limits
+    image: postgres:16.8-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    cpus: "2.00"
+    mem_limit: 2g
+    pids_limit: 256
+
+  redis:
+    <<: *service-limits
+    image: redis:7.4.2-alpine
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1000"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    cpus: "0.50"
+    mem_limit: 512m
+    pids_limit: 128
+
+  minio:
+    <<: *service-limits
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9000/minio/health/ready >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    cpus: "1.00"
+    mem_limit: 1g
+    pids_limit: 256
+
+  minio-init:
+    <<: *service-limits
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    restart: "no"
+    entrypoint: ["sh", "/usr/local/bin/init-minio.sh"]
+    environment:
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?Set MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?Set MINIO_SECRET_KEY}
+      MINIO_VIDEO_BUCKET: ${MINIO_VIDEO_BUCKET:?Set MINIO_VIDEO_BUCKET}
+    depends_on:
+      minio:
+        condition: service_healthy
+    volumes:
+      - ./config/minio/app-policy.json:/etc/minio/app-policy.json:ro
+      - ./scripts/init-minio.sh:/usr/local/bin/init-minio.sh:ro
+    cpus: "0.25"
+    mem_limit: 256m
+    pids_limit: 64
+
+  livekit:
+    <<: *service-limits
+    image: livekit/livekit-server:v1.13.4@sha256:189f7c81b704a36642bc5c7e2d3e1ae83744627c11978a23a251bf19fbec64e0
+    entrypoint: ["sh", "/usr/local/bin/start-livekit.sh"]
+    environment:
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET}
+      LIVEKIT_CONFIG_PATH: /etc/livekit/livekit.yaml
+      LIVEKIT_KEY_FILE: /tmp/livekit.keys
+      LIVEKIT_WEBHOOK_URL: https://${APP_DOMAIN:?Set APP_DOMAIN}/api/livekit/webhook
+      TURN_DOMAIN: ${TURN_DOMAIN:?Set TURN_DOMAIN}
+    ports:
+      - "${LIVEKIT_RTC_TCP_PORT:-7881}:7881"
+      - "${LIVEKIT_RTC_UDP_PORT:-7882}:7882/udp"
+      - "${TURN_TLS_PORT:-5349}:5349"
+      - "${TURN_UDP_PORT:-3478}:3478/udp"
+    volumes:
+      - ./config/livekit/production.yaml:/etc/livekit/livekit.yaml:ro
+      - ./scripts/start-livekit.sh:/usr/local/bin/start-livekit.sh:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:7880/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    cpus: "1.00"
+    mem_limit: 1g
+    pids_limit: 256
+
+  livekit-egress:
+    <<: *service-limits
+    image: livekit/egress:v1.9.1@sha256:99f6a19cd93a6336c518845bae22a151ad63497329b62f1b1b8c4125c52d57c8
+    cap_add:
+      - SYS_ADMIN
+    environment:
+      EGRESS_CONFIG_BODY: |
+        log_level: info
+        api_key: ${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY}
+        api_secret: ${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET}
+        ws_url: ws://livekit:7880
+        insecure: true
+        redis:
+          address: redis:6379
+        s3:
+          access_key: ${MINIO_ACCESS_KEY:?Set MINIO_ACCESS_KEY}
+          secret: ${MINIO_SECRET_KEY:?Set MINIO_SECRET_KEY}
+          endpoint: http://minio:9000
+          bucket: ${MINIO_VIDEO_BUCKET:?Set MINIO_VIDEO_BUCKET}
+          region: us-east-1
+          force_path_style: true
+    depends_on:
+      livekit:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "ps | grep -v grep | grep -q egress"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    cpus: "2.00"
+    mem_limit: 4g
+    pids_limit: 512
+
+  prometheus:
+    <<: *service-limits
+    image: prom/prometheus:v3.1.0
+    profiles:
+      - monitoring
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}
+      - --web.enable-lifecycle
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./config/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      app:
+        condition: service_healthy
+    cpus: "0.50"
+    mem_limit: 512m
+    pids_limit: 128
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pgdata:
+  redis_data:
+  minio_data:
+  prometheus_data:
+
+networks:
+  edge:
+  internal:
+    internal: true

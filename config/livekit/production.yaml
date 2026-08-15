@@ -1,0 +1,23 @@
+# Production LiveKit server config. API keys and webhook URLs are injected by
+# scripts/start-livekit.sh so secrets never live in this file.
+port: 7880
+bind_addresses:
+  - "0.0.0.0"
+log_level: info
+
+redis:
+  address: redis:6379
+
+rtc:
+  tcp_port: 7881
+  udp_port: 7882
+  use_external_ip: true
+
+# Enable these ports only after DNS/firewall rules are ready for the TURN
+# domain. Caddy handles WSS on 443; TURN/TLS and TURN/UDP are direct edge ports.
+turn:
+  enabled: true
+  domain: __TURN_DOMAIN__
+  tls_port: 5349
+  udp_port: 3478
+  external_tls: true
