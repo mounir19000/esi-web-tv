@@ -26,6 +26,35 @@ services:
     volumes:
       - minio_data:/data
 
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  media-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    restart: always
+    command: npm run worker:media
+    environment:
+      DATABASE_URL: postgresql://esitv:esitvpassword@db:5432/esitvdb
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_USE_SSL: "false"
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MEDIA_WORKER_VERSION: docker-local
+    depends_on:
+      - db
+      - minio
+      - redis
+
   livekit:
     image: livekit/livekit-server:latest
     restart: always
@@ -38,3 +67,4 @@ services:
 volumes:
   pgdata:
   minio_data:
+  redis_data:
