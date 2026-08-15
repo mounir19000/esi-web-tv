@@ -2,17 +2,17 @@ import { Queue, type JobsOptions } from "bullmq"
 import IORedis from "ioredis"
 import prisma from "@/lib/prisma"
 import { VideoStatus } from "@prisma/client"
+import { appConfig } from "@/lib/env"
 
 export const mediaProcessingQueueName = "media-processing"
 export const mediaProcessingJobName = "process-video"
-export const mediaWorkerVersion = process.env.MEDIA_WORKER_VERSION || "local-dev"
+export const mediaWorkerVersion = appConfig.queue.mediaWorkerVersion
 
 export type MediaProcessingJobData = {
   videoId: string
   processingVersion: number
 }
 
-const defaultRedisUrl = "redis://localhost:6379"
 const mediaProcessingAttempts = 3
 
 declare global {
@@ -40,7 +40,7 @@ export function getMediaProcessingJobOptions(videoId: string, processingVersion:
 }
 
 export function createRedisConnection() {
-  return new IORedis(process.env.REDIS_URL || defaultRedisUrl, {
+  return new IORedis(appConfig.queue.redisUrl, {
     maxRetriesPerRequest: null,
   })
 }

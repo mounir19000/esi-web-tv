@@ -8,7 +8,7 @@ ESI Web TV is a self-hosted web television platform for École nationale Supéri
 - Role-based access for guests, students, teachers, and admins
 - Student-scoped module content through year groups such as `1CP`, `2CP`, and `1CS`
 - Teacher dashboard for uploading MP4 videos and starting browser-based live rooms
-- Admin dashboard for creating and deleting users
+- Admin dashboard for creating, changing, and disabling users
 - Live streaming rooms powered by LiveKit
 - Video storage through MinIO
 - MP4 processing and thumbnail generation through FFmpeg
@@ -35,40 +35,24 @@ Install dependencies:
 npm install
 ```
 
-Create a `.env` file:
+Create an explicit local environment file and edit the placeholder values:
 
 ```bash
-DATABASE_URL="postgresql://esitv:esitvpassword@localhost:5433/esitvdb"
-NEXTAUTH_SECRET="replace-with-a-long-random-secret"
-NEXTAUTH_URL="http://localhost:3000"
-
-LIVEKIT_API_KEY="devkey"
-LIVEKIT_API_SECRET="dev-secret-key-change-me-32-chars-minimum"
-NEXT_PUBLIC_LIVEKIT_URL="ws://localhost:7880"
-
-MINIO_ENDPOINT="localhost"
-MINIO_PORT="9000"
-MINIO_USE_SSL="false"
-MINIO_ROOT_USER="minioadmin"
-MINIO_ROOT_PASSWORD="minioadmin"
-MEDIA_SIGNED_URL_TTL_SECONDS="60"
-
-REDIS_URL="redis://localhost:6379"
-MEDIA_WORKER_VERSION="local-dev"
-MEDIA_WORKER_CONCURRENCY="1"
+cp .env.local.example .env.local
 ```
+
+Generate strong local values with `openssl rand -base64 32`. Runtime config is validated at startup; production mode fails if required variables are missing, point at localhost, or use known sample values.
 
 Start the local services:
 
 ```bash
-docker compose up -d
+docker compose --env-file .env.local up -d
 ```
 
-Prepare the database and seed demo users:
+Prepare the database:
 
 ```bash
-npx prisma db push
-npx prisma db seed
+DOTENV_CONFIG_PATH=.env.local npx prisma db push
 ```
 
 Run the development server:
@@ -79,15 +63,23 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-## Demo Accounts
+## Admin Bootstrap And Demo Accounts
 
-After running the seed command, these local accounts are available:
+Production admins should be created with the one-time bootstrap command:
 
-| Role | Email | Password |
-| --- | --- | --- |
-| Admin | `admin@esi.dz` | `admin` |
-| Teacher | `teacher@esi.dz` | `teacher` |
-| Student | `student@esi.dz` | `student` |
+```bash
+DOTENV_CONFIG_PATH=.env.local BOOTSTRAP_ADMIN_EMAIL="admin@esi.dz" npm run bootstrap:admin
+```
+
+If `BOOTSTRAP_ADMIN_PASSWORD` is unset, the command prints one generated password once. The command refuses to run after an active admin already exists.
+
+Local/test demo users are optional and gated by `APP_ENV=local` or `APP_ENV=test` plus `ALLOW_DEMO_SEED=true`:
+
+```bash
+DOTENV_CONFIG_PATH=.env.local npx prisma db seed
+```
+
+The seed script no longer contains fixed demo passwords. It reads `DEMO_ADMIN_PASSWORD`, `DEMO_TEACHER_PASSWORD`, and `DEMO_STUDENT_PASSWORD` when provided, or generates and prints local/test passwords during the seed run.
 
 Only `@esi.dz` email addresses are accepted.
 
@@ -110,7 +102,8 @@ npm run lint
 npm run test:unit
 npm run test:livekit-smoke
 npx playwright test
-npx prisma db seed
+DOTENV_CONFIG_PATH=.env.local npx prisma db seed
+DOTENV_CONFIG_PATH=.env.local npm run bootstrap:admin
 ```
 
 ## Local Services
@@ -129,7 +122,7 @@ The included Docker Compose file starts:
 
 ## LiveKit Deployment Notes
 
-Local Compose runs LiveKit from the pinned `livekit/livekit-server:v1.13.4` image digest and mounts `livekit.yaml` for ports and RTC settings. `scripts/start-livekit.sh` writes the LiveKit key file inside the container from `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`; the secret is never printed in logs. The local browser endpoint is `NEXT_PUBLIC_LIVEKIT_URL=ws://localhost:7880`.
+Local Compose runs LiveKit from the pinned `livekit/livekit-server:v1.13.4` image digest and mounts `livekit.yaml` for ports and RTC settings. `scripts/start-livekit.sh` writes the LiveKit key file inside the container from `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`; the credential value is never printed in logs. The local browser endpoint is configured by `NEXT_PUBLIC_LIVEKIT_URL`.
 
 Production should expose LiveKit to clients through a TLS endpoint such as `wss://livekit.example.edu` and set `NEXT_PUBLIC_LIVEKIT_URL` to that WSS URL. Put the API/WebSocket port `7880` behind TLS termination, expose the configured WebRTC TCP/UDP ports at the edge, and enable TURN/TLS or TURN/UDP for restrictive networks. Do not run production with `--dev`; update `livekit.yaml` for public IP discovery, firewall rules, and TURN certificates before exposing it outside local development.
 
@@ -147,6 +140,8 @@ Only `READY` videos appear in public and scoped library listings. Owners and adm
 
 The MinIO API endpoint must be reachable from the browser and allow CORS requests from the Next.js origin for `PUT`, `POST`, `DELETE`, `GET`, and `HEAD`. Expose the `ETag` header if you add client-side part verification.
 
+The application and media worker use `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY`, not root credentials. Local Compose provisions a limited MinIO user through `scripts/init-minio.sh` and `config/minio/app-policy.json`; production should provision an equivalent service account out of band and rotate it separately from the root/admin account.
+
 Run the media worker next to Redis, PostgreSQL, and MinIO while testing uploads locally:
 
 ```bash
@@ -159,6 +154,12 @@ Make sure FFmpeg and FFprobe are installed on the host that runs the media worke
 ffmpeg -version
 ffprobe -version
 ```
+
+## Secret Management
+
+Do not commit concrete `.env`, `.env.local`, or production environment files. Keep `.env.local.example` for local shape and `.env.production.example` for deployment shape only.
+
+For production, store `DATABASE_URL`, `AUTH_SECRET`, LiveKit credentials, MinIO application credentials, Redis credentials, and bootstrap values in the deployment secret manager. Rotate all currently deployed sample credentials before exposing the system. If any credential is disclosed, rotate the affected secret, increment impacted user session versions when identity credentials are involved, and restart the app and media worker so validated configuration is reloaded.
 
 ## Testing
 

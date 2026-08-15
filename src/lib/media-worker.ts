@@ -9,14 +9,10 @@ import {
   normalizeProcessingError,
   processMediaJob,
 } from "@/lib/media-processing"
-
-const defaultWorkerConcurrency = 1
+import { appConfig } from "@/lib/env"
 
 function getWorkerConcurrency() {
-  const configuredConcurrency = Number.parseInt(process.env.MEDIA_WORKER_CONCURRENCY || "", 10)
-  return Number.isSafeInteger(configuredConcurrency) && configuredConcurrency > 0
-    ? configuredConcurrency
-    : defaultWorkerConcurrency
+  return appConfig.queue.mediaWorkerConcurrency
 }
 
 function getMaxAttempts(job: Job<MediaProcessingJobData>) {

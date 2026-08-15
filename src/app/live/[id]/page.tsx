@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import prisma from "@/lib/prisma"
 import { canManageUserContent, canViewScopedContent } from "@/lib/content-access"
 import { getCurrentUser, requireUser } from "@/lib/current-user"
+import { appConfig } from "@/lib/env"
 import LiveRoomClient from "@/components/LiveRoomClient"
 
 export const dynamic = "force-dynamic"
@@ -88,7 +89,11 @@ export default async function LiveRoomPage({ params }: LiveRoomPageProps) {
       <main className="live-content">
         <div className="live-stage" data-lk-theme="default">
           {stream.isLive ? (
-            <LiveRoomClient roomName={stream.streamKey} canPublish={canPublish} />
+            <LiveRoomClient
+              roomName={stream.streamKey}
+              canPublish={canPublish}
+              serverUrl={appConfig.livekit.publicUrl}
+            />
           ) : (
             <div className="live-status">
               <div>

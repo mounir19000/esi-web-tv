@@ -1,14 +1,21 @@
 import * as Minio from 'minio'
+import { appConfig } from '@/lib/env'
 
-export const VIDEO_BUCKET_NAME = 'esitv-videos'
+export const VIDEO_BUCKET_NAME = appConfig.minio.videoBucket
 
-export const minioClient = new Minio.Client({
-  endPoint: process.env.MINIO_ENDPOINT || 'localhost',
-  port: parseInt(process.env.MINIO_PORT || '9000'),
-  useSSL: process.env.MINIO_USE_SSL === 'true',
-  accessKey: process.env.MINIO_ROOT_USER || 'minioadmin',
-  secretKey: process.env.MINIO_ROOT_PASSWORD || 'minioadmin',
-})
+let cachedMinioClient: Minio.Client | null = null
+
+export function getMinioClient() {
+  cachedMinioClient ??= new Minio.Client({
+    endPoint: appConfig.minio.endpoint,
+    port: appConfig.minio.port,
+    useSSL: appConfig.minio.useSSL,
+    accessKey: appConfig.minio.accessKey,
+    secretKey: appConfig.minio.secretKey,
+  })
+
+  return cachedMinioClient
+}
 
 type BucketPolicyStatement = {
   Effect?: string
@@ -77,35 +84,10 @@ export function bucketPolicyAllowsAnonymousRead(policyText: string) {
   })
 }
 
-function isMissingPolicyError(error: unknown) {
-  const minioError = error as { code?: string; Code?: string; statusCode?: number }
-  return (
-    minioError.code === 'NoSuchBucketPolicy' ||
-    minioError.Code === 'NoSuchBucketPolicy' ||
-    minioError.statusCode === 404
-  )
-}
-
-export const ensureVideoBucketPrivate = async () => {
-  try {
-    const policy = await minioClient.getBucketPolicy(VIDEO_BUCKET_NAME)
-    if (bucketPolicyAllowsAnonymousRead(policy)) {
-      await minioClient.setBucketPolicy(VIDEO_BUCKET_NAME, '')
-    }
-  } catch (error) {
-    if (isMissingPolicyError(error)) {
-      return
-    }
-
-    throw error
-  }
-}
-
 export const initBuckets = async () => {
+  const minioClient = getMinioClient()
   const exists = await minioClient.bucketExists(VIDEO_BUCKET_NAME)
   if (!exists) {
-    await minioClient.makeBucket(VIDEO_BUCKET_NAME, 'us-east-1')
+    throw new Error(`Video bucket "${VIDEO_BUCKET_NAME}" is not provisioned`)
   }
-
-  await ensureVideoBucketPrivate()
 }

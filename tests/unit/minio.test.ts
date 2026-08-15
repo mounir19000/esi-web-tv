@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import { describe, it } from "node:test"
 import { bucketPolicyAllowsAnonymousRead } from "../../src/lib/minio"
 
@@ -38,5 +39,17 @@ describe("bucketPolicyAllowsAnonymousRead", () => {
 
   it("fails closed on invalid policy JSON", () => {
     assert.throws(() => bucketPolicyAllowsAnonymousRead("{"), /not valid JSON/)
+  })
+
+  it("keeps the local app policy limited to object storage actions", () => {
+    const policy = JSON.parse(readFileSync("config/minio/app-policy.json", "utf8")) as {
+      Statement: { Action: string[] }[]
+    }
+    const actions = policy.Statement.flatMap((statement) => statement.Action)
+
+    assert.equal(actions.includes("admin:*"), false)
+    assert.equal(actions.includes("s3:*"), false)
+    assert.equal(actions.includes("s3:PutBucketPolicy"), false)
+    assert.equal(actions.includes("s3:CreateBucket"), false)
   })
 })

@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { canViewScopedContent } from '@/lib/content-access';
 import { randomUUID } from 'crypto';
-import { getLiveKitCredentials, LiveKitConfigurationError } from '@/lib/livekit-config';
 import { getCurrentAuth } from '@/lib/current-user';
+import { appConfig } from '@/lib/env';
 
 export async function GET(req: NextRequest) {
   const { session, user } = await getCurrentAuth();
@@ -34,22 +34,10 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  let credentials: ReturnType<typeof getLiveKitCredentials>;
-  try {
-    credentials = getLiveKitCredentials();
-  } catch (error) {
-    if (error instanceof LiveKitConfigurationError) {
-      console.error(`LiveKit token configuration error: ${error.message}`);
-      return NextResponse.json({ error: 'LiveKit is not configured' }, { status: 503 });
-    }
-
-    throw error;
-  }
-
   const participantIdentity = user?.id || `guest-${randomUUID()}`;
   const participantName = user?.name || 'Guest';
   
-  const at = new AccessToken(credentials.apiKey, credentials.apiSecret, {
+  const at = new AccessToken(appConfig.livekit.apiKey, appConfig.livekit.apiSecret, {
     identity: participantIdentity,
     name: participantName,
   });

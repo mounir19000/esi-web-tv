@@ -1,7 +1,8 @@
-import { minioClient, VIDEO_BUCKET_NAME } from "@/lib/minio"
+import { getMinioClient, VIDEO_BUCKET_NAME } from "@/lib/minio"
 import { isVideoMediaAsset, resolveVideoAssetObjectKey } from "@/lib/media"
 import { authorizeVideoAccess } from "@/lib/video-authorization"
 import { getCurrentUser } from "@/lib/current-user"
+import { appConfig } from "@/lib/env"
 import { VideoStatus } from "@prisma/client"
 import { NextResponse } from "next/server"
 
@@ -21,12 +22,10 @@ const noStoreHeaders = {
 }
 
 function getSignedUrlTtlSeconds() {
-  const configuredTtl = Number.parseInt(process.env.MEDIA_SIGNED_URL_TTL_SECONDS || "", 10)
-  if (!Number.isFinite(configuredTtl)) {
-    return defaultSignedUrlTtlSeconds
-  }
-
-  return Math.min(Math.max(configuredTtl, minSignedUrlTtlSeconds), maxSignedUrlTtlSeconds)
+  return Math.min(
+    Math.max(appConfig.media.signedUrlTtlSeconds || defaultSignedUrlTtlSeconds, minSignedUrlTtlSeconds),
+    maxSignedUrlTtlSeconds,
+  )
 }
 
 function jsonError(error: string, status: number) {
@@ -64,6 +63,7 @@ export async function GET(_request: Request, context: { params: Promise<MediaRou
   }
 
   const signedUrlTtlSeconds = getSignedUrlTtlSeconds()
+  const minioClient = getMinioClient()
   const signedUrl = await minioClient.presignedGetObject(VIDEO_BUCKET_NAME, objectKey, signedUrlTtlSeconds, {
     "response-cache-control": `private, max-age=${signedUrlTtlSeconds}`,
   })

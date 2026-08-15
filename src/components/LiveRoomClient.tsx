@@ -16,9 +16,11 @@ type TokenState =
 export default function LiveRoomClient({
   roomName,
   canPublish,
+  serverUrl,
 }: {
   roomName: string
   canPublish: boolean
+  serverUrl: string
 }) {
   const [state, setState] = useState<TokenState>({ status: "loading", token: "" })
 
@@ -85,7 +87,7 @@ export default function LiveRoomClient({
       video={canPublish}
       audio={canPublish}
       token={state.token}
-      serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL || "ws://localhost:7880"}
+      serverUrl={serverUrl}
       data-lk-theme="default"
       style={{ height: "68vh", minHeight: 360 }}
     >

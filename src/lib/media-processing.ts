@@ -7,7 +7,7 @@ import type { Readable } from "node:stream"
 import ffmpeg from "fluent-ffmpeg"
 import { VideoStatus } from "@prisma/client"
 import prisma from "@/lib/prisma"
-import { minioClient, VIDEO_BUCKET_NAME } from "@/lib/minio"
+import { getMinioClient, VIDEO_BUCKET_NAME } from "@/lib/minio"
 import { transcodeAndUpload } from "@/lib/ffmpeg"
 import {
   enqueueVideoProcessing,
@@ -49,6 +49,7 @@ export function normalizeProcessingError(error: unknown) {
 async function downloadObjectToTempFile(objectKey: string, videoId: string) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), `esitv-media-${videoId}-`))
   const tempPath = path.join(tempDir, "source.mp4")
+  const minioClient = getMinioClient()
   const objectStream = (await minioClient.getObject(VIDEO_BUCKET_NAME, objectKey)) as Readable
   await pipeline(objectStream, createWriteStream(tempPath))
   return { tempDir, tempPath }
@@ -146,7 +147,7 @@ export async function processMediaJob(data: MediaProcessingJobData, context: Pro
       },
     })
 
-    await minioClient.removeObject(VIDEO_BUCKET_NAME, video.sourceKey)
+    await getMinioClient().removeObject(VIDEO_BUCKET_NAME, video.sourceKey)
     return { skipped: false }
   } catch (error) {
     const processingError = normalizeProcessingError(error)

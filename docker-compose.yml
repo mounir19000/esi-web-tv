@@ -3,9 +3,9 @@ services:
     image: postgres:15-alpine
     restart: always
     environment:
-      POSTGRES_USER: esitv
-      POSTGRES_PASSWORD: esitvpassword
-      POSTGRES_DB: esitvdb
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env.local}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.local}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env.local}
     ports:
       - "5433:5432"
     volumes:
@@ -16,13 +16,31 @@ services:
     restart: always
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env.local}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env.local}
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
       - minio_data:/data
+
+  minio-init:
+    image: minio/mc
+    restart: "no"
+    entrypoint: ["sh", "/usr/local/bin/init-minio.sh"]
+    environment:
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env.local}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env.local}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?Set MINIO_ACCESS_KEY in .env.local}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?Set MINIO_SECRET_KEY in .env.local}
+      MINIO_VIDEO_BUCKET: ${MINIO_VIDEO_BUCKET:?Set MINIO_VIDEO_BUCKET in .env.local}
+    depends_on:
+      minio:
+        condition: service_started
+    volumes:
+      - ./config/minio/app-policy.json:/etc/minio/app-policy.json:ro
+      - ./scripts/init-minio.sh:/usr/local/bin/init-minio.sh:ro
 
   redis:
     image: redis:7-alpine
@@ -40,26 +58,40 @@ services:
     restart: always
     command: npm run worker:media
     environment:
-      DATABASE_URL: postgresql://esitv:esitvpassword@db:5432/esitvdb
-      REDIS_URL: redis://redis:6379
+      APP_ENV: ${APP_ENV:?Set APP_ENV in .env.local}
+      DATABASE_URL: ${WORKER_DATABASE_URL:?Set WORKER_DATABASE_URL in .env.local}
+      AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET in .env.local}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:?Set NEXTAUTH_URL in .env.local}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY in .env.local}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET in .env.local}
+      NEXT_PUBLIC_LIVEKIT_URL: ${NEXT_PUBLIC_LIVEKIT_URL:?Set NEXT_PUBLIC_LIVEKIT_URL in .env.local}
+      REDIS_URL: ${REDIS_URL:?Set REDIS_URL in .env.local}
       MINIO_ENDPOINT: minio
       MINIO_PORT: "9000"
       MINIO_USE_SSL: "false"
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-      MEDIA_WORKER_VERSION: docker-local
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?Set MINIO_ACCESS_KEY in .env.local}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?Set MINIO_SECRET_KEY in .env.local}
+      MINIO_VIDEO_BUCKET: ${MINIO_VIDEO_BUCKET:?Set MINIO_VIDEO_BUCKET in .env.local}
+      MEDIA_SIGNED_URL_TTL_SECONDS: ${MEDIA_SIGNED_URL_TTL_SECONDS:?Set MEDIA_SIGNED_URL_TTL_SECONDS in .env.local}
+      MEDIA_WORKER_VERSION: ${MEDIA_WORKER_VERSION:?Set MEDIA_WORKER_VERSION in .env.local}
+      MEDIA_WORKER_CONCURRENCY: ${MEDIA_WORKER_CONCURRENCY:?Set MEDIA_WORKER_CONCURRENCY in .env.local}
     depends_on:
-      - db
-      - minio
-      - redis
+      db:
+        condition: service_started
+      minio:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
 
   livekit:
     image: livekit/livekit-server:v1.13.4@sha256:189f7c81b704a36642bc5c7e2d3e1ae83744627c11978a23a251bf19fbec64e0
     restart: always
     entrypoint: ["sh", "/usr/local/bin/start-livekit.sh"]
     environment:
-      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY in .env}
-      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET in .env}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY in .env.local}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET in .env.local}
       LIVEKIT_CONFIG_PATH: /etc/livekit/livekit.yaml
       LIVEKIT_KEY_FILE: /tmp/livekit.keys
     ports:
