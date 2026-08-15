@@ -10,6 +10,7 @@ import { getVideoCaptionUrl, getVideoPlaybackUrl, getVideoThumbnailUrl } from "@
 import { retryVideoProcessing } from "@/lib/media-queue"
 import { recordAuditEvent } from "@/lib/audit"
 import { boundedLongText, boundedText, normalizeEsiEmail, parseAudience, stringInput, validationLimits, type FieldErrors } from "@/lib/validation"
+import { moduleOptionSelect, paginationLimits, videoCardSelect } from "@/lib/listing-queries"
 import { VideoCard } from "@/components/ContentCards"
 import { VideoPlayer } from "@/components/VideoPlayer"
 
@@ -238,10 +239,38 @@ export default async function VideoPage({ params, searchParams }: VideoPageProps
   const user = await getCurrentUser()
   const video = await prisma.video.findUnique({
     where: { id },
-    include: {
-      uploader: true,
-      module: true,
-      cohort: true,
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      type: true,
+      isPublic: true,
+      audience: true,
+      status: true,
+      url: true,
+      thumbnailUrl: true,
+      sourceKey: true,
+      thumbnailStatus: true,
+      processingErrorMessage: true,
+      createdAt: true,
+      uploaderId: true,
+      moduleId: true,
+      cohortId: true,
+      uploader: {
+        select: {
+          name: true,
+        },
+      },
+      module: {
+        select: moduleOptionSelect,
+      },
+      cohort: {
+        select: {
+          id: true,
+          name: true,
+          yearGroup: true,
+        },
+      },
       audienceUsers: {
         select: { userId: true },
       },
@@ -251,9 +280,16 @@ export default async function VideoPage({ params, searchParams }: VideoPageProps
           status: MediaAssetStatus.READY,
         },
         orderBy: [{ isDefault: "desc" }, { label: "asc" }],
+        select: {
+          id: true,
+          label: true,
+          language: true,
+          isDefault: true,
+        },
       },
       variants: {
         orderBy: { height: "asc" },
+        select: { id: true },
       },
     },
   })
@@ -293,19 +329,27 @@ export default async function VideoPage({ params, searchParams }: VideoPageProps
 
   const relatedVideos = await prisma.video.findMany({
     where: relatedWhere,
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: 3,
-    include: { uploader: true, module: true },
+    select: videoCardSelect,
   })
+  const moduleLimit = paginationLimits.modules.maxSize
   const managementData = canManageVideo
     ? await Promise.all([
         prisma.module.findMany({
           where: user?.role === Role.ADMIN ? {} : { id: { in: user?.teacherAssignments.map((assignment) => assignment.moduleId) ?? [] } },
           orderBy: [{ yearGroup: "asc" }, { name: "asc" }],
+          take: moduleLimit + 1,
+          select: moduleOptionSelect,
         }),
       ])
     : null
-  const [manageableModules = []] = managementData ?? []
+  const [manageableModuleRows = []] = managementData ?? []
+  const baseManageableModules = manageableModuleRows.slice(0, moduleLimit)
+  const manageableModules = video.module && !baseManageableModules.some((module) => module.id === video.module?.id)
+    ? [video.module, ...baseManageableModules]
+    : baseManageableModules
+  const manageableModulesOverflow = manageableModuleRows.length > moduleLimit
 
   return (
     <main className="page">
@@ -403,6 +447,9 @@ export default async function VideoPage({ params, searchParams }: VideoPageProps
                         </option>
                       ))}
                     </select>
+                    {manageableModulesOverflow && (
+                      <p className="field-hint">Showing the first {baseManageableModules.length} modules.</p>
+                    )}
                   </div>
                 </div>
                 <button type="submit" className="button-secondary">Save details</button>

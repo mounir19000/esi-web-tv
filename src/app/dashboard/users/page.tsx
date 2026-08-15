@@ -1,8 +1,24 @@
 import type { Metadata } from "next"
+import Link from "next/link"
 import { redirect } from "next/navigation"
-import { ProvisioningStatus } from "@prisma/client"
+import { ProvisioningStatus, Role, type Prisma } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/current-user"
+import {
+  adminUserRowSelect,
+  andWhere,
+  cohortOptionSelect,
+  dateCursorWhere,
+  listingHref,
+  moduleOptionSelect,
+  normalizeQueryParam,
+  paginateDateCursorItems,
+  paginationLimits,
+  parseListingParams,
+  provisioningStatusParam,
+  roleParam,
+  userSearchWhere,
+} from "@/lib/listing-queries"
 import {
   createUser,
   disableUser,
@@ -19,28 +35,67 @@ export const metadata: Metadata = {
   title: "Users | ESI Web TV",
 }
 
-export default async function UsersPage() {
+type UsersPageProps = {
+  searchParams?: Promise<{
+    q?: string
+    role?: string
+    status?: string
+    yearGroup?: string
+    cursor?: string
+    limit?: string
+  }>
+}
+
+export default async function UsersPage({ searchParams }: UsersPageProps) {
   const currentUser = await getCurrentUser()
   if (currentUser?.role !== "ADMIN" || currentUser.provisioningStatus !== ProvisioningStatus.APPROVED) {
     redirect("/dashboard")
   }
 
-  const [users, modules, cohorts] = await Promise.all([
+  const params = (await searchParams) ?? {}
+  const { query, cursor, pageSize } = parseListingParams(params, "users")
+  const selectedRole = roleParam(params.role)
+  const selectedStatus = provisioningStatusParam(params.status)
+  const selectedYearGroup = normalizeQueryParam(params.yearGroup, 20)
+  const baseParams = {
+    q: query || undefined,
+    role: selectedRole,
+    status: selectedStatus,
+    yearGroup: selectedYearGroup || undefined,
+    limit: pageSize === paginationLimits.users.defaultSize ? undefined : pageSize,
+  }
+  const userWhere = andWhere<Prisma.UserWhereInput>([
+    userSearchWhere(query),
+    selectedRole ? { role: selectedRole } : undefined,
+    selectedStatus ? { provisioningStatus: selectedStatus } : undefined,
+    selectedYearGroup ? { yearGroup: { equals: selectedYearGroup, mode: "insensitive" } } : undefined,
+    dateCursorWhere<Prisma.UserWhereInput>(cursor),
+  ])
+  const moduleLimit = paginationLimits.modules.maxSize
+
+  const [userRows, moduleRows, cohortRows] = await Promise.all([
     prisma.user.findMany({
-      orderBy: [{ role: "asc" }, { email: "asc" }],
-      include: {
-        cohortMemberships: { select: { cohortId: true } },
-        moduleEnrollments: { select: { moduleId: true } },
-        teacherAssignments: { select: { moduleId: true } },
-      },
+      where: userWhere,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: pageSize + 1,
+      select: adminUserRowSelect,
     }),
     prisma.module.findMany({
       orderBy: [{ yearGroup: "asc" }, { name: "asc" }],
+      take: moduleLimit + 1,
+      select: moduleOptionSelect,
     }),
     prisma.cohort.findMany({
       orderBy: [{ yearGroup: "asc" }, { name: "asc" }],
+      take: moduleLimit + 1,
+      select: cohortOptionSelect,
     }),
   ])
+  const { items: users, nextCursor } = paginateDateCursorItems(userRows, pageSize)
+  const modules = moduleRows.slice(0, moduleLimit)
+  const cohorts = cohortRows.slice(0, moduleLimit)
+  const modulesOverflow = moduleRows.length > moduleLimit
+  const cohortsOverflow = cohortRows.length > moduleLimit
 
   return (
     <main className="page">
@@ -92,9 +147,60 @@ export default async function UsersPage() {
             <div className="panel-header">
               <div>
                 <h2 className="section-title">Existing users</h2>
-                <p className="muted">{users.length} account{users.length === 1 ? "" : "s"}</p>
+                <p className="muted">Showing {users.length} account{users.length === 1 ? "" : "s"}</p>
               </div>
             </div>
+
+            <form action="/dashboard/users" className="filter-form">
+              {baseParams.limit && <input type="hidden" name="limit" value={baseParams.limit} />}
+              <div className="field">
+                <label htmlFor="user-search">Search users</label>
+                <input
+                  id="user-search"
+                  name="q"
+                  type="search"
+                  className="form-input"
+                  defaultValue={query}
+                  placeholder="Name, email, year"
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="role-filter">Role</label>
+                <select id="role-filter" name="role" className="form-select" defaultValue={selectedRole ?? ""}>
+                  <option value="">All roles</option>
+                  {Object.values(Role).map((role) => (
+                    <option key={role} value={role}>
+                      {role}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="status-filter">Status</label>
+                <select id="status-filter" name="status" className="form-select" defaultValue={selectedStatus ?? ""}>
+                  <option value="">All statuses</option>
+                  {Object.values(ProvisioningStatus).map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="year-filter">Year</label>
+                <input
+                  id="year-filter"
+                  name="yearGroup"
+                  className="form-input"
+                  defaultValue={selectedYearGroup}
+                  placeholder="1CP"
+                />
+              </div>
+              <button type="submit" className="button-secondary">Apply</button>
+              {(query || selectedRole || selectedStatus || selectedYearGroup) && (
+                <Link href="/dashboard/users" className="button-quiet">Clear</Link>
+              )}
+            </form>
 
             <div className="table-wrap">
               <table className="data-table">
@@ -202,6 +308,9 @@ export default async function UsersPage() {
                                 {cohorts.length > 0 && (
                                   <fieldset className="assignment-fieldset">
                                     <legend>Cohorts</legend>
+                                    {cohortsOverflow && (
+                                      <p className="field-hint">Showing the first {cohorts.length} cohorts.</p>
+                                    )}
                                     {cohorts.map((cohort) => (
                                       <label key={cohort.id} className="checkbox-row">
                                         <input
@@ -218,6 +327,9 @@ export default async function UsersPage() {
                                 {user.role === "STUDENT" && (
                                   <fieldset className="assignment-fieldset">
                                     <legend>Student modules</legend>
+                                    {modulesOverflow && (
+                                      <p className="field-hint">Showing the first {modules.length} modules.</p>
+                                    )}
                                     {modules.map((module) => (
                                       <label key={module.id} className="checkbox-row">
                                         <input
@@ -234,6 +346,9 @@ export default async function UsersPage() {
                                 {user.role === "TEACHER" && (
                                   <fieldset className="assignment-fieldset">
                                     <legend>Teacher modules</legend>
+                                    {modulesOverflow && (
+                                      <p className="field-hint">Showing the first {modules.length} modules.</p>
+                                    )}
                                     {modules.map((module) => (
                                       <label key={module.id} className="checkbox-row">
                                         <input
@@ -263,6 +378,13 @@ export default async function UsersPage() {
                 </tbody>
               </table>
             </div>
+            {nextCursor && (
+              <div className="pagination">
+                <Link href={listingHref("/dashboard/users", { ...baseParams, cursor: nextCursor })} className="button-secondary">
+                  Next page
+                </Link>
+              </div>
+            )}
           </section>
         </div>
       </section>

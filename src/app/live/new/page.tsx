@@ -8,6 +8,7 @@ import { canPublishToAudience, validateAudienceSelection } from "@/lib/content-a
 import { getCurrentUser, requireEducator } from "@/lib/current-user"
 import { appConfig } from "@/lib/env"
 import { ensureLiveStreamRoom } from "@/lib/livekit-lifecycle"
+import { moduleOptionSelect, paginationLimits } from "@/lib/listing-queries"
 import { boundedLongText, boundedText, validationLimits, type FieldErrors } from "@/lib/validation"
 
 export const dynamic = "force-dynamic"
@@ -33,10 +34,15 @@ export default async function NewLivePage() {
   }
 
   const assignedModuleIds = user.teacherAssignments.map((assignment) => assignment.moduleId)
-  const modules = await prisma.module.findMany({
+  const moduleLimit = paginationLimits.modules.maxSize
+  const moduleRows = await prisma.module.findMany({
     where: user.role === "ADMIN" ? {} : { id: { in: assignedModuleIds } },
     orderBy: [{ yearGroup: "asc" }, { name: "asc" }],
+    take: moduleLimit + 1,
+    select: moduleOptionSelect,
   })
+  const modules = moduleRows.slice(0, moduleLimit)
+  const modulesOverflow = moduleRows.length > moduleLimit
 
   async function createLiveStream(formData: FormData) {
     "use server"
@@ -114,6 +120,9 @@ export default async function NewLivePage() {
           </div>
         </div>
 
+        {modulesOverflow && (
+          <p className="field-hint">Showing the first {modules.length} modules.</p>
+        )}
         <form action={createLiveStream} className="form-stack">
           <div className="field">
             <label htmlFor="title">Broadcast title</label>

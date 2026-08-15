@@ -1,9 +1,20 @@
 import type { Metadata } from "next"
 import Link from "next/link"
+import type { Prisma } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { visibleVideoWhere } from "@/lib/content-access"
 import { VideoCard } from "@/components/ContentCards"
 import { getCurrentUser } from "@/lib/current-user"
+import {
+  andWhere,
+  dateCursorWhere,
+  listingHref,
+  paginateDateCursorItems,
+  paginationLimits,
+  parseListingParams,
+  videoCardSelect,
+  videoSearchWhere,
+} from "@/lib/listing-queries"
 
 export const dynamic = "force-dynamic"
 
@@ -16,20 +27,36 @@ const videoTypes = ["TEACHING", "CLUB", "EXPLANATION", "OTHER"] as const
 type ExplorePageProps = {
   searchParams?: Promise<{
     type?: string
+    q?: string
+    cursor?: string
+    limit?: string
   }>
 }
 
 export default async function ExplorePage({ searchParams }: ExplorePageProps) {
   const user = await getCurrentUser()
-  const params = await searchParams
+  const params = (await searchParams) ?? {}
+  const { query, cursor, pageSize } = parseListingParams(params, "videos")
   const selectedType = videoTypes.find((type) => type === params?.type)
   const visibilityWhere = visibleVideoWhere(user)
+  const baseParams = {
+    q: query || undefined,
+    type: selectedType,
+    limit: pageSize === paginationLimits.videos.defaultSize ? undefined : pageSize,
+  }
 
-  const videos = await prisma.video.findMany({
-    where: selectedType ? { AND: [visibilityWhere, { type: selectedType }] } : visibilityWhere,
-    orderBy: { createdAt: "desc" },
-    include: { uploader: true, module: true },
+  const videoRows = await prisma.video.findMany({
+    where: andWhere<Prisma.VideoWhereInput>([
+      visibilityWhere,
+      selectedType ? { type: selectedType } : undefined,
+      videoSearchWhere(query),
+      dateCursorWhere<Prisma.VideoWhereInput>(cursor),
+    ]),
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: pageSize + 1,
+    select: videoCardSelect,
   })
+  const { items: videos, nextCursor } = paginateDateCursorItems(videoRows, pageSize)
 
   return (
     <main className="page">
@@ -43,19 +70,44 @@ export default async function ExplorePage({ searchParams }: ExplorePageProps) {
         </div>
 
         <div className="actions" aria-label="Video type filters">
-          <Link href="/explore" className={selectedType ? "button-secondary" : "button"}>
+          <Link
+            href={listingHref("/explore", { q: query || undefined, limit: baseParams.limit })}
+            className={selectedType ? "button-secondary" : "button"}
+          >
             All
           </Link>
           {videoTypes.map((type) => (
             <Link
               key={type}
-              href={`/explore?type=${type}`}
+              href={listingHref("/explore", { ...baseParams, type })}
               className={selectedType === type ? "button" : "button-secondary"}
             >
               {type}
             </Link>
           ))}
         </div>
+
+        <form action="/explore" className="filter-form">
+          {selectedType && <input type="hidden" name="type" value={selectedType} />}
+          {baseParams.limit && <input type="hidden" name="limit" value={baseParams.limit} />}
+          <div className="field">
+            <label htmlFor="video-search">Search videos</label>
+            <input
+              id="video-search"
+              name="q"
+              type="search"
+              className="form-input"
+              defaultValue={query}
+              placeholder="Title, module, uploader"
+            />
+          </div>
+          <button type="submit" className="button-secondary">Search</button>
+          {query && (
+            <Link href={listingHref("/explore", { type: selectedType, limit: baseParams.limit })} className="button-quiet">
+              Clear
+            </Link>
+          )}
+        </form>
       </section>
 
       <section className="container section">
@@ -69,6 +121,13 @@ export default async function ExplorePage({ searchParams }: ExplorePageProps) {
             {videos.map((video) => (
               <VideoCard key={video.id} video={video} />
             ))}
+          </div>
+        )}
+        {nextCursor && (
+          <div className="pagination">
+            <Link href={listingHref("/explore", { ...baseParams, cursor: nextCursor })} className="button-secondary">
+              Next page
+            </Link>
           </div>
         )}
       </section>

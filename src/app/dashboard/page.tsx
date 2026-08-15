@@ -1,11 +1,12 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { ProvisioningStatus, StreamStatus } from "@prisma/client"
+import { ProvisioningStatus, StreamStatus, type Prisma } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { visibleLiveStreamWhere, visibleVideoWhere } from "@/lib/content-access"
 import { LiveStreamCard, VideoCard } from "@/components/ContentCards"
 import { getCurrentUser } from "@/lib/current-user"
+import { andWhere, liveStreamCardSelect, videoCardSelect } from "@/lib/listing-queries"
 
 export const dynamic = "force-dynamic"
 
@@ -25,33 +26,36 @@ export default async function DashboardPage() {
   const isTeacher = isApproved && role === "TEACHER"
   const canCreate = isTeacher || isAdmin
 
-  const ownVideoWhere = isAdmin
+  const ownVideoWhere: Prisma.VideoWhereInput = isAdmin
     ? {}
     : isTeacher
       ? { uploaderId: user.id }
       : visibleVideoWhere(user)
-  const manageableStreamWhere = {
+  const manageableStreamWhere: Prisma.LiveStreamWhereInput = {
     status: { in: [StreamStatus.STARTING, StreamStatus.LIVE, StreamStatus.ENDING] },
     ...(isAdmin ? {} : { hostId: user.id }),
   }
+  const visibleStreamWhere = canCreate
+    ? manageableStreamWhere
+    : andWhere<Prisma.LiveStreamWhereInput>([{ isLive: true }, visibleLiveStreamWhere(user)])
 
   const [videoCount, liveCount, userCount, recentVideos, liveStreams] = await Promise.all([
     prisma.video.count({ where: ownVideoWhere }),
     prisma.liveStream.count({
-      where: canCreate ? manageableStreamWhere : { isLive: true, ...visibleLiveStreamWhere(user) },
+      where: visibleStreamWhere,
     }),
     isAdmin ? prisma.user.count() : Promise.resolve(0),
     prisma.video.findMany({
       where: ownVideoWhere,
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 3,
-      include: { uploader: true, module: true },
+      select: videoCardSelect,
     }),
     prisma.liveStream.findMany({
-      where: canCreate ? manageableStreamWhere : { isLive: true, ...visibleLiveStreamWhere(user) },
-      orderBy: { startedAt: "desc" },
+      where: visibleStreamWhere,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 3,
-      include: { host: true, module: true },
+      select: liveStreamCardSelect,
     }),
   ])
 

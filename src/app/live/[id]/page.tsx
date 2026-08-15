@@ -12,6 +12,7 @@ import {
   publishRecording,
   retryRecording,
 } from "@/lib/livekit-lifecycle"
+import { moduleOptionSelect } from "@/lib/listing-queries"
 import LiveRoomClient from "@/components/LiveRoomClient"
 
 export const dynamic = "force-dynamic"
@@ -39,16 +40,52 @@ export default async function LiveRoomPage({ params }: LiveRoomPageProps) {
   const user = await getCurrentUser()
   const stream = await prisma.liveStream.findUnique({
     where: { streamKey: id },
-    include: {
-      host: true,
-      module: true,
-      cohort: true,
+    select: {
+      id: true,
+      title: true,
+      isPublic: true,
+      audience: true,
+      isLive: true,
+      status: true,
+      streamKey: true,
+      hostId: true,
+      moduleId: true,
+      cohortId: true,
+      participantCount: true,
+      providerRoomId: true,
+      host: {
+        select: {
+          name: true,
+        },
+      },
+      module: {
+        select: moduleOptionSelect,
+      },
+      cohort: {
+        select: {
+          id: true,
+          name: true,
+          yearGroup: true,
+        },
+      },
       liveStreamAudienceUsers: {
         select: { userId: true },
       },
       recordings: {
         orderBy: { createdAt: "desc" },
-        include: { publishedVideo: true },
+        select: {
+          id: true,
+          status: true,
+          objectKey: true,
+          sizeBytes: true,
+          durationSeconds: true,
+          errorMessage: true,
+          publishedVideo: {
+            select: {
+              id: true,
+            },
+          },
+        },
       },
     },
   })
