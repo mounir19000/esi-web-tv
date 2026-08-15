@@ -40,6 +40,15 @@ enum VideoStatus {
   DELETING
 }
 
+enum StreamStatus {
+  DRAFT
+  STARTING
+  LIVE
+  ENDING
+  ENDED
+  FAILED
+}
+
 enum AuditEventType {
   LOGIN
   LOGOUT
@@ -62,6 +71,8 @@ model User {
   isActive       Boolean   @default(true)
   disabledAt     DateTime?
   sessionVersion Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   videos              Video[]         @relation("Uploader")
   liveStreams         LiveStream[]    @relation("Host")
@@ -78,9 +89,14 @@ model Module {
   id             String          @id @default(cuid())
   name           String
   yearGroup      String // e.g. "1CP"
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
   videos         Video[]
   liveStreams    LiveStream[]
   uploadSessions UploadSession[]
+
+  @@unique([name, yearGroup])
+  @@index([yearGroup, name])
 }
 
 model Video {
@@ -102,15 +118,20 @@ model Video {
   processingCompletedAt   DateTime?
   processingWorkerVersion String?
   createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
 
   uploaderId String
-  uploader   User   @relation("Uploader", fields: [uploaderId], references: [id])
+  uploader   User   @relation("Uploader", fields: [uploaderId], references: [id], onDelete: Restrict)
 
   moduleId String?
-  module   Module? @relation(fields: [moduleId], references: [id])
+  module   Module? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
 
   @@index([status, createdAt])
   @@index([uploaderId, status])
+  @@index([isPublic, status, createdAt])
+  @@index([type, status, createdAt])
+  @@index([moduleId, status, createdAt])
+  @@index([uploaderId, createdAt])
 }
 
 model UploadSession {
@@ -137,26 +158,38 @@ model UploadSession {
   owner   User   @relation("UploadOwner", fields: [ownerId], references: [id], onDelete: Cascade)
 
   moduleId String?
-  module   Module? @relation(fields: [moduleId], references: [id])
+  module   Module? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
 
   @@index([ownerId, state, expiresAt])
+  @@index([moduleId, state, createdAt])
 }
 
 model LiveStream {
-  id          String    @id @default(cuid())
-  title       String
-  description String?
-  isPublic    Boolean   @default(false)
-  isLive      Boolean   @default(false)
-  streamKey   String    @unique @default(uuid())
-  startedAt   DateTime?
-  endedAt     DateTime?
+  id                  String       @id @default(cuid())
+  title               String
+  description         String?
+  isPublic            Boolean      @default(false)
+  isLive              Boolean      @default(false)
+  status              StreamStatus @default(ENDED)
+  streamKey           String       @unique @default(uuid())
+  providerRoomId      String?
+  participantCount    Int          @default(0)
+  lastProviderEventAt DateTime?
+  startedAt           DateTime?
+  endedAt             DateTime?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
 
   hostId String
-  host   User   @relation("Host", fields: [hostId], references: [id])
+  host   User   @relation("Host", fields: [hostId], references: [id], onDelete: Restrict)
 
   moduleId String?
-  module   Module? @relation(fields: [moduleId], references: [id])
+  module   Module? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+
+  @@index([isLive, isPublic, startedAt])
+  @@index([status, startedAt])
+  @@index([moduleId, isLive, startedAt])
+  @@index([hostId, isLive, startedAt])
 }
 
 // NextAuth standard tables
