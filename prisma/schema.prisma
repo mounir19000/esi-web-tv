@@ -156,6 +156,13 @@ model User {
   auditEventsSubject      AuditEvent[]              @relation("AuditSubject")
 
   @@index([isActive, role])
+  @@index([createdAt, id])
+  @@index([role, email, id])
+  @@index([role, createdAt, id])
+  @@index([provisioningStatus, createdAt, id])
+  @@index([provisioningStatus, role, createdAt, id])
+  @@index([yearGroup, createdAt, id])
+  @@index([yearGroup, role, email, id])
 }
 
 model Module {
@@ -172,6 +179,8 @@ model Module {
 
   @@unique([name, yearGroup])
   @@index([yearGroup, name])
+  @@index([yearGroup, name, id])
+  @@index([createdAt, id])
 }
 
 model Cohort {
@@ -237,13 +246,21 @@ model Video {
   audienceUsers      VideoAudienceUser[]
 
   @@index([status, createdAt])
+  @@index([status, createdAt, id])
+  @@index([status, sourceKey])
   @@index([uploaderId, status])
   @@index([isPublic, status, createdAt])
+  @@index([isPublic, status, createdAt, id])
   @@index([audience, status, createdAt])
+  @@index([audience, status, createdAt, id])
   @@index([type, status, createdAt])
+  @@index([type, status, createdAt, id])
   @@index([moduleId, status, createdAt])
+  @@index([moduleId, status, createdAt, id])
   @@index([cohortId, status, createdAt])
+  @@index([cohortId, status, createdAt, id])
   @@index([uploaderId, createdAt])
+  @@index([uploaderId, status, createdAt, id])
 }
 
 model VideoVariant {
@@ -325,8 +342,10 @@ model UploadSession {
   cohort   Cohort? @relation(fields: [cohortId], references: [id], onDelete: SetNull)
 
   @@index([ownerId, state, expiresAt])
+  @@index([ownerId, state, expiresAt, id])
   @@index([moduleId, state, createdAt])
   @@index([cohortId, state, createdAt])
+  @@index([state, createdAt, id])
 }
 
 model LiveStream {
@@ -361,11 +380,18 @@ model LiveStream {
   liveStreamAudienceUsers LiveStreamAudienceUser[]
 
   @@index([isLive, isPublic, startedAt])
+  @@index([isLive, createdAt, id])
+  @@index([isLive, isPublic, createdAt, id])
   @@index([audience, isLive, startedAt])
+  @@index([audience, isLive, createdAt, id])
   @@index([status, startedAt])
+  @@index([status, createdAt, id])
   @@index([moduleId, isLive, startedAt])
+  @@index([moduleId, isLive, createdAt, id])
   @@index([cohortId, isLive, startedAt])
+  @@index([cohortId, isLive, createdAt, id])
   @@index([hostId, isLive, startedAt])
+  @@index([hostId, status, createdAt, id])
 }
 
 model CohortMembership {
@@ -465,6 +491,7 @@ model Recording {
 
   @@index([streamId, status])
   @@index([status, createdAt])
+  @@index([status, createdAt, id])
 }
 
 model RecordingJob {
@@ -486,7 +513,9 @@ model RecordingJob {
   recording   Recording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
 
   @@index([streamId, status])
+  @@index([streamId, status, createdAt, id])
   @@index([recordingId, status])
+  @@index([status, createdAt, id])
 }
 
 // NextAuth standard tables
@@ -539,4 +568,6 @@ model AuditEvent {
   @@index([actorId, createdAt])
   @@index([subjectId, createdAt])
   @@index([type, createdAt])
+  @@index([type, createdAt, id])
+  @@index([createdAt, id])
 }
