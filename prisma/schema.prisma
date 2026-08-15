@@ -49,6 +49,29 @@ enum StreamStatus {
   FAILED
 }
 
+enum RecordingPolicy {
+  NONE
+  AUTO
+}
+
+enum RecordingStatus {
+  RECORDING
+  READY
+  PROCESSING
+  PUBLISHED
+  FAILED
+  DISCARDED
+}
+
+enum RecordingJobStatus {
+  STARTING
+  ACTIVE
+  ENDING
+  COMPLETED
+  FAILED
+  ABORTED
+}
+
 enum AuditEventType {
   LOGIN
   LOGOUT
@@ -126,6 +149,8 @@ model Video {
   moduleId String?
   module   Module? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
 
+  publishedRecording Recording? @relation("PublishedRecording")
+
   @@index([status, createdAt])
   @@index([uploaderId, status])
   @@index([isPublic, status, createdAt])
@@ -165,20 +190,21 @@ model UploadSession {
 }
 
 model LiveStream {
-  id                  String       @id @default(cuid())
+  id                  String          @id @default(cuid())
   title               String
   description         String?
-  isPublic            Boolean      @default(false)
-  isLive              Boolean      @default(false)
-  status              StreamStatus @default(ENDED)
-  streamKey           String       @unique @default(uuid())
+  isPublic            Boolean         @default(false)
+  isLive              Boolean         @default(false)
+  status              StreamStatus    @default(ENDED)
+  recordingPolicy     RecordingPolicy @default(NONE)
+  streamKey           String          @unique @default(uuid())
   providerRoomId      String?
-  participantCount    Int          @default(0)
+  participantCount    Int             @default(0)
   lastProviderEventAt DateTime?
   startedAt           DateTime?
   endedAt             DateTime?
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 
   hostId String
   host   User   @relation("Host", fields: [hostId], references: [id], onDelete: Restrict)
@@ -186,10 +212,62 @@ model LiveStream {
   moduleId String?
   module   Module? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
 
+  recordings    Recording[]
+  recordingJobs RecordingJob[]
+
   @@index([isLive, isPublic, startedAt])
   @@index([status, startedAt])
   @@index([moduleId, isLive, startedAt])
   @@index([hostId, isLive, startedAt])
+}
+
+model Recording {
+  id              String          @id @default(cuid())
+  status          RecordingStatus @default(RECORDING)
+  objectKey       String?         @unique
+  sizeBytes       BigInt?
+  durationSeconds Int?
+  errorCode       String?
+  errorMessage    String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  publishedAt     DateTime?
+  discardedAt     DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  streamId String
+  stream   LiveStream @relation(fields: [streamId], references: [id], onDelete: Cascade)
+
+  publishedVideoId String? @unique
+  publishedVideo   Video?  @relation("PublishedRecording", fields: [publishedVideoId], references: [id], onDelete: SetNull)
+
+  jobs RecordingJob[]
+
+  @@index([streamId, status])
+  @@index([status, createdAt])
+}
+
+model RecordingJob {
+  id               String             @id @default(cuid())
+  status           RecordingJobStatus @default(STARTING)
+  providerEgressId String?            @unique
+  outputKey        String
+  errorCode        String?
+  errorMessage     String?
+  startedAt        DateTime?
+  endedAt          DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  streamId String
+  stream   LiveStream @relation(fields: [streamId], references: [id], onDelete: Cascade)
+
+  recordingId String
+  recording   Recording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+
+  @@index([streamId, status])
+  @@index([recordingId, status])
 }
 
 // NextAuth standard tables

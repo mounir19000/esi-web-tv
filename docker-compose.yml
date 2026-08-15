@@ -94,10 +94,13 @@ services:
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET in .env.local}
       LIVEKIT_CONFIG_PATH: /etc/livekit/livekit.yaml
       LIVEKIT_KEY_FILE: /tmp/livekit.keys
+      LIVEKIT_WEBHOOK_URL: ${LIVEKIT_WEBHOOK_URL:-}
     ports:
       - "7880:7880"
       - "7881:7881"
       - "7882:7882/udp"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./livekit.yaml:/etc/livekit/livekit.yaml:ro
       - ./scripts/start-livekit.sh:/usr/local/bin/start-livekit.sh:ro
@@ -107,6 +110,37 @@ services:
       timeout: 5s
       retries: 6
       start_period: 5s
+
+  livekit-egress:
+    image: livekit/egress:v1.9.1@sha256:99f6a19cd93a6336c518845bae22a151ad63497329b62f1b1b8c4125c52d57c8
+    restart: always
+    cap_add:
+      - SYS_ADMIN
+    environment:
+      EGRESS_CONFIG_BODY: |
+        log_level: info
+        api_key: ${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY in .env.local}
+        api_secret: ${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET in .env.local}
+        ws_url: ws://livekit:7880
+        insecure: true
+        redis:
+          address: redis:6379
+        s3:
+          access_key: ${MINIO_ACCESS_KEY:?Set MINIO_ACCESS_KEY in .env.local}
+          secret: ${MINIO_SECRET_KEY:?Set MINIO_SECRET_KEY in .env.local}
+          endpoint: http://minio:9000
+          bucket: ${MINIO_VIDEO_BUCKET:?Set MINIO_VIDEO_BUCKET in .env.local}
+          region: us-east-1
+          force_path_style: true
+    depends_on:
+      livekit:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
 
 volumes:
   pgdata:

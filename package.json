@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test:unit": "tsx --import ./tests/setup-env.ts --test tests/unit/*.test.ts",
     "test:livekit-smoke": "tsx scripts/livekit-smoke.ts",
+    "reconcile:livekit": "tsx scripts/reconcile-livekit.ts",
     "bootstrap:admin": "tsx scripts/bootstrap-admin.ts",
     "worker:media": "tsx src/workers/media-worker.ts"
   },

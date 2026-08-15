@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { redirect } from "next/navigation"
+import { StreamStatus } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { visibleLiveStreamWhere, visibleVideoWhere } from "@/lib/content-access"
 import { LiveStreamCard, VideoCard } from "@/components/ContentCards"
@@ -28,15 +29,15 @@ export default async function DashboardPage() {
     : isTeacher
       ? { uploaderId: user.id }
       : visibleVideoWhere(user)
+  const manageableStreamWhere = {
+    status: { in: [StreamStatus.STARTING, StreamStatus.LIVE, StreamStatus.ENDING] },
+    ...(isAdmin ? {} : { hostId: user.id }),
+  }
 
   const [videoCount, liveCount, userCount, recentVideos, liveStreams] = await Promise.all([
     prisma.video.count({ where: ownVideoWhere }),
     prisma.liveStream.count({
-      where: canCreate
-        ? isAdmin
-          ? {}
-          : { hostId: user.id }
-        : { isLive: true, ...visibleLiveStreamWhere(user) },
+      where: canCreate ? manageableStreamWhere : { isLive: true, ...visibleLiveStreamWhere(user) },
     }),
     isAdmin ? prisma.user.count() : Promise.resolve(0),
     prisma.video.findMany({
@@ -46,11 +47,7 @@ export default async function DashboardPage() {
       include: { uploader: true, module: true },
     }),
     prisma.liveStream.findMany({
-      where: canCreate
-        ? isAdmin
-          ? { isLive: true }
-          : { isLive: true, hostId: user.id }
-        : { isLive: true, ...visibleLiveStreamWhere(user) },
+      where: canCreate ? manageableStreamWhere : { isLive: true, ...visibleLiveStreamWhere(user) },
       orderBy: { startedAt: "desc" },
       take: 3,
       include: { host: true, module: true },

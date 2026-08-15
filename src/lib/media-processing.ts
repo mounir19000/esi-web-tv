@@ -5,10 +5,11 @@ import path from "node:path"
 import { pipeline } from "node:stream/promises"
 import type { Readable } from "node:stream"
 import ffmpeg from "fluent-ffmpeg"
-import { VideoStatus } from "@prisma/client"
+import { RecordingStatus, VideoStatus } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { getMinioClient, VIDEO_BUCKET_NAME } from "@/lib/minio"
 import { transcodeAndUpload } from "@/lib/ffmpeg"
+import { MEDIA_OBJECT_PREFIXES } from "@/lib/media"
 import {
   enqueueVideoProcessing,
   mediaWorkerVersion,
@@ -118,6 +119,20 @@ async function recordProcessingFailure(videoId: string, error: MediaProcessingEr
       processingWorkerVersion: mediaWorkerVersion,
     },
   })
+
+  if (isFinalAttempt) {
+    await prisma.recording.updateMany({
+      where: {
+        publishedVideoId: videoId,
+        status: RecordingStatus.PROCESSING,
+      },
+      data: {
+        status: RecordingStatus.FAILED,
+        errorCode: error.code,
+        errorMessage: error.message,
+      },
+    })
+  }
 }
 
 export async function processMediaJob(data: MediaProcessingJobData, context: ProcessingJobContext) {
@@ -147,7 +162,22 @@ export async function processMediaJob(data: MediaProcessingJobData, context: Pro
       },
     })
 
-    await getMinioClient().removeObject(VIDEO_BUCKET_NAME, video.sourceKey)
+    await prisma.recording.updateMany({
+      where: {
+        publishedVideoId: video.id,
+        status: { in: [RecordingStatus.PROCESSING, RecordingStatus.FAILED] },
+      },
+      data: {
+        status: RecordingStatus.PUBLISHED,
+        publishedAt: new Date(),
+        errorCode: null,
+        errorMessage: null,
+      },
+    })
+
+    if (video.sourceKey.startsWith(MEDIA_OBJECT_PREFIXES.staging)) {
+      await getMinioClient().removeObject(VIDEO_BUCKET_NAME, video.sourceKey)
+    }
     return { skipped: false }
   } catch (error) {
     const processingError = normalizeProcessingError(error)

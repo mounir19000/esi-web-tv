@@ -25,6 +25,7 @@ type LiveCardData = {
   title: string
   description: string | null
   isPublic: boolean
+  status?: string
   startedAt: Date | null
   host: {
     name: string | null
@@ -83,12 +84,17 @@ export function VideoCard({ video }: { video: VideoCardData }) {
 }
 
 export function LiveStreamCard({ stream }: { stream: LiveCardData }) {
+  const statusLabel = stream.status
+    ? stream.status.charAt(0) + stream.status.slice(1).toLowerCase()
+    : "Live"
+  const isLive = stream.status ? stream.status === "LIVE" : true
+
   return (
     <Link href={`/live/${stream.streamKey}`} className="video-card">
       <div className="media-frame">
-        <span className="media-placeholder">LIVE</span>
-        <span className="badge badge-live badge-corner">
-          Live
+        <span className="media-placeholder">{isLive ? "LIVE" : statusLabel.toUpperCase()}</span>
+        <span className={isLive ? "badge badge-live badge-corner" : "badge badge-corner"}>
+          {statusLabel}
         </span>
       </div>
       <div className="card-body">

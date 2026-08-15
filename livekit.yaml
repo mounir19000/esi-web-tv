@@ -1,5 +1,5 @@
-# Local development LiveKit configuration. API keys are injected through
-# scripts/start-livekit.sh from LIVEKIT_API_KEY and LIVEKIT_API_SECRET.
+# Local development LiveKit configuration. API keys and optional webhook
+# delivery are injected through scripts/start-livekit.sh from environment.
 port: 7880
 log_level: info
 
