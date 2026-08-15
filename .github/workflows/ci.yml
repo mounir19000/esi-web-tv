@@ -29,6 +29,9 @@ jobs:
       - name: Prepare local environment
         run: cp .env.local.example .env
 
+      - name: Generate Prisma client
+        run: npm run db:generate
+
       - name: Start integration services
         run: docker compose --env-file .env.local.example up -d db redis minio minio-init livekit
 
