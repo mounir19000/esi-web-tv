@@ -76,7 +76,7 @@ export async function enqueueVideoProcessing(videoId: string, processingVersion:
   return job
 }
 
-export async function retryVideoProcessing(videoId: string) {
+export async function retryVideoProcessing(videoId: string, options: { includeReady?: boolean } = {}) {
   const video = await prisma.video.findUnique({
     where: { id: videoId },
     select: {
@@ -86,7 +86,11 @@ export async function retryVideoProcessing(videoId: string) {
     },
   })
 
-  if (!video || video.status !== VideoStatus.FAILED || !video.sourceKey) {
+  const retryableStatuses: VideoStatus[] = options.includeReady
+    ? [VideoStatus.FAILED, VideoStatus.READY]
+    : [VideoStatus.FAILED]
+
+  if (!video || !retryableStatuses.includes(video.status) || !video.sourceKey) {
     return null
   }
 
