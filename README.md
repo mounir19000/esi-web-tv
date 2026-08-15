@@ -120,7 +120,9 @@ The included Docker Compose file starts:
 
 ## Video Upload Notes
 
-Uploaded MP4 files are written to a temporary folder, processed with FFmpeg, and stored in a private MinIO bucket. Playback and thumbnails are served through app authorization endpoints that issue short-lived signed URLs. For production, move the processing work to a background queue such as BullMQ, a worker service, or a job runner on the VM.
+Uploaded MP4 files use server-created multipart upload sessions. The browser uploads chunks directly to private MinIO staging with short-lived signed URLs, then the app finalizes the object and starts FFmpeg processing. Playback and thumbnails are served through app authorization endpoints that issue short-lived signed URLs. For production, move the processing work to a background queue such as BullMQ, a worker service, or a job runner on the VM.
+
+The MinIO API endpoint must be reachable from the browser and allow CORS requests from the Next.js origin for `PUT`, `POST`, `DELETE`, `GET`, and `HEAD`. Expose the `ETag` header if you add client-side part verification.
 
 Make sure FFmpeg is installed on the host that runs the Next.js server:
 

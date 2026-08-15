@@ -655,6 +655,35 @@ video {
   font-weight: 700;
 }
 
+.upload-progress {
+  display: grid;
+  gap: 8px;
+}
+
+.upload-progress-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.upload-progress-track {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8eef2;
+}
+
+.upload-progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand);
+  transition: width 160ms ease;
+}
+
 .watch-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
