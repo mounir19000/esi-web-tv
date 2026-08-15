@@ -8,8 +8,9 @@ export class LiveKitConfigurationError extends Error {
 }
 
 type LiveKitCredentialEnv = {
-  LIVEKIT_API_KEY?: string
-  LIVEKIT_API_SECRET?: string
+  [key: string]: string | undefined
+  LIVEKIT_API_KEY?: string | undefined
+  LIVEKIT_API_SECRET?: string | undefined
 }
 
 export function getLiveKitCredentials(env: LiveKitCredentialEnv = process.env) {
