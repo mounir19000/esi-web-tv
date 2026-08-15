@@ -59,7 +59,7 @@ export default async function ExplorePage({ searchParams }: ExplorePageProps) {
   const { items: videos, nextCursor } = paginateDateCursorItems(videoRows, pageSize)
 
   return (
-    <main className="page">
+    <main id="main-content" className="page" tabIndex={-1}>
       <section className="container">
         <div className="section-header">
           <div>

@@ -14,6 +14,7 @@ export default function LoginForm({ googleEnabled }: LoginFormProps) {
   const callbackUrl = searchParams.get("callbackUrl") || "/dashboard"
   const [error, setError] = useState("")
   const [isPending, setIsPending] = useState(false)
+  const statusMessage = isPending ? "Signing in." : ""
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -42,8 +43,13 @@ export default function LoginForm({ googleEnabled }: LoginFormProps) {
   return (
     <div className="login-card">
       {error && <div className="alert" role="alert">{error}</div>}
+      {statusMessage && (
+        <p className="sr-only" role="status" aria-live="polite">
+          {statusMessage}
+        </p>
+      )}
 
-      <form onSubmit={handleSubmit} className="form-stack">
+      <form onSubmit={handleSubmit} className="form-stack" aria-busy={isPending}>
         <div className="field">
           <label htmlFor="email">ESI email</label>
           <input

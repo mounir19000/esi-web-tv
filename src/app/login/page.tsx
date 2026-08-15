@@ -16,7 +16,7 @@ export default async function LoginPage() {
   }
 
   return (
-    <div className="page-narrow">
+    <main id="main-content" className="page-narrow" tabIndex={-1}>
       <section className="panel">
         <div className="panel-header">
           <div>
@@ -28,6 +28,6 @@ export default async function LoginPage() {
         </div>
         <LoginForm googleEnabled={appConfig.auth.google.enabled} />
       </section>
-    </div>
+    </main>
   )
 }

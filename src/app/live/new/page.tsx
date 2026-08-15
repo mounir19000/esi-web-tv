@@ -110,7 +110,7 @@ export default async function NewLivePage() {
   }
 
   return (
-    <main className="page-narrow">
+    <main id="main-content" className="page-narrow" tabIndex={-1}>
       <section className="panel">
         <div className="panel-header">
           <div>

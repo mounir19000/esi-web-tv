@@ -68,6 +68,15 @@ export function UploadVideoForm({ modules }: { modules: ModuleOption[] }) {
   const activeRequestsRef = useRef(new Set<XMLHttpRequest>())
 
   const isBusy = phase !== "idle"
+  const progressValue = phase === "processing" ? 100 : progress
+  const progressMessage =
+    phase === "preparing"
+      ? "Preparing upload."
+      : phase === "uploading"
+        ? `Uploading video, ${progress}% complete.`
+        : phase === "processing"
+          ? "Finalizing upload and starting processing."
+          : ""
 
   function updatePartProgress(partNumber: number, loadedBytes: number, fileSize: number) {
     partProgressRef.current.set(partNumber, loadedBytes)
@@ -247,7 +256,7 @@ export function UploadVideoForm({ modules }: { modules: ModuleOption[] }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="form-stack">
+    <form onSubmit={handleSubmit} className="form-stack" aria-busy={isBusy}>
       {error && (
         <div className="alert" role="alert">
           <p>{error}</p>
@@ -336,13 +345,23 @@ export function UploadVideoForm({ modules }: { modules: ModuleOption[] }) {
       </div>
 
       {isBusy && (
-        <div className="upload-progress" aria-live="polite">
+        <div className="upload-progress">
+          <p className="sr-only" role="status" aria-live="polite">
+            {progressMessage}
+          </p>
           <div className="upload-progress-row">
             <span>{phase === "processing" ? "Finalizing" : "Uploading"}</span>
-            <span>{progress}%</span>
+            <span>{progressValue}%</span>
           </div>
-          <div className="upload-progress-track">
-            <div className="upload-progress-bar" style={{ width: `${progress}%` }} />
+          <div
+            className="upload-progress-track"
+            role="progressbar"
+            aria-label="Video upload progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progressValue}
+          >
+            <div className="upload-progress-bar" style={{ width: `${progressValue}%` }} />
           </div>
         </div>
       )}

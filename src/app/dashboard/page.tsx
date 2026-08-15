@@ -60,7 +60,7 @@ export default async function DashboardPage() {
   ])
 
   return (
-    <main className="page">
+    <main id="main-content" className="page" tabIndex={-1}>
       <section className="container">
         <div className="section-header">
           <div>

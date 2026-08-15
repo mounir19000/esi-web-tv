@@ -189,7 +189,7 @@ export default async function LiveRoomPage({ params }: LiveRoomPageProps) {
         </div>
       </header>
 
-      <main className="live-content">
+      <main id="main-content" className="live-content" tabIndex={-1}>
         <div className="live-stage" data-lk-theme="default">
           {canJoinRoom ? (
             <LiveRoomClient
@@ -198,21 +198,21 @@ export default async function LiveRoomPage({ params }: LiveRoomPageProps) {
               serverUrl={appConfig.livekit.publicUrl}
             />
           ) : stream.status === StreamStatus.STARTING ? (
-            <div className="live-status">
+            <div className="live-status" role="status" aria-live="polite">
               <div>
                 <h2 className="section-title">Waiting for host</h2>
                 <p className="muted">This room will open when the broadcast connection is active.</p>
               </div>
             </div>
           ) : stream.status === StreamStatus.FAILED ? (
-            <div className="live-status">
+            <div className="live-status" role="alert">
               <div>
                 <h2 className="section-title">Stream unavailable</h2>
                 <p className="muted">The provider room could not be started.</p>
               </div>
             </div>
           ) : (
-            <div className="live-status">
+            <div className="live-status" role="status">
               <div>
                 <h2 className="section-title">This stream has ended</h2>
                 <p className="muted">Recordings will appear in Explore when they are published.</p>

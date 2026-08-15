@@ -37,7 +37,7 @@ export default async function Home() {
 
   return (
     <>
-      <main className="page">
+      <main id="main-content" className="page" tabIndex={-1}>
         <section className="container hero">
           <div className="hero-grid">
             <div className="hero-copy">
