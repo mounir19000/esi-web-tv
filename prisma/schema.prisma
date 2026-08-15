@@ -23,6 +23,14 @@ enum VideoType {
   OTHER
 }
 
+enum UploadSessionState {
+  INITIATED
+  UPLOADING
+  COMPLETED
+  ABORTED
+  EXPIRED
+}
+
 model User {
   id            String    @id @default(cuid())
   name          String?
@@ -31,70 +39,101 @@ model User {
   emailVerified DateTime?
   image         String?
   role          Role      @default(GUEST)
-  yearGroup     String?   // e.g. "1CP", "2CP", etc.
-  
-  videos        Video[]   @relation("Uploader")
-  liveStreams   LiveStream[] @relation("Host")
-  accounts      Account[]
-  sessions      Session[]
+  yearGroup     String? // e.g. "1CP", "2CP", etc.
+
+  videos         Video[]         @relation("Uploader")
+  liveStreams    LiveStream[]    @relation("Host")
+  uploadSessions UploadSession[] @relation("UploadOwner")
+  accounts       Account[]
+  sessions       Session[]
 }
 
 model Module {
-  id          String   @id @default(cuid())
-  name        String
-  yearGroup   String   // e.g. "1CP"
-  videos      Video[]
-  liveStreams LiveStream[]
+  id             String          @id @default(cuid())
+  name           String
+  yearGroup      String // e.g. "1CP"
+  videos         Video[]
+  liveStreams    LiveStream[]
+  uploadSessions UploadSession[]
 }
 
 model Video {
-  id          String   @id @default(cuid())
-  title       String
-  description String?
-  type        VideoType
-  isPublic    Boolean  @default(false)
-  url         String   // MinIO URL or path
+  id           String    @id @default(cuid())
+  title        String
+  description  String?
+  type         VideoType
+  isPublic     Boolean   @default(false)
+  url          String // MinIO URL or path
   thumbnailUrl String?
-  createdAt   DateTime @default(now())
-  
-  uploaderId  String
-  uploader    User     @relation("Uploader", fields: [uploaderId], references: [id])
-  
-  moduleId    String?
-  module      Module?  @relation(fields: [moduleId], references: [id])
+  createdAt    DateTime  @default(now())
+
+  uploaderId String
+  uploader   User   @relation("Uploader", fields: [uploaderId], references: [id])
+
+  moduleId String?
+  module   Module? @relation(fields: [moduleId], references: [id])
+}
+
+model UploadSession {
+  id                String             @id @default(cuid())
+  title             String
+  description       String?
+  type              VideoType
+  isPublic          Boolean            @default(false)
+  originalFileName  String?
+  objectKey         String             @unique
+  expectedSize      BigInt
+  expectedPartSize  Int
+  expectedType      String
+  checksum          String?
+  multipartUploadId String
+  state             UploadSessionState @default(INITIATED)
+  expiresAt         DateTime
+  completedAt       DateTime?
+  videoId           String?            @unique
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  ownerId String
+  owner   User   @relation("UploadOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  moduleId String?
+  module   Module? @relation(fields: [moduleId], references: [id])
+
+  @@index([ownerId, state, expiresAt])
 }
 
 model LiveStream {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   title       String
   description String?
-  isPublic    Boolean  @default(false)
-  isLive      Boolean  @default(false)
-  streamKey   String   @unique @default(uuid())
+  isPublic    Boolean   @default(false)
+  isLive      Boolean   @default(false)
+  streamKey   String    @unique @default(uuid())
   startedAt   DateTime?
   endedAt     DateTime?
-  
-  hostId      String
-  host        User     @relation("Host", fields: [hostId], references: [id])
-  
-  moduleId    String?
-  module      Module?  @relation(fields: [moduleId], references: [id])
+
+  hostId String
+  host   User   @relation("Host", fields: [hostId], references: [id])
+
+  moduleId String?
+  module   Module? @relation(fields: [moduleId], references: [id])
 }
 
 // NextAuth standard tables
 model Account {
-  id                 String  @id @default(cuid())
-  userId             String
-  type               String
-  provider           String
-  providerAccountId  String
-  refresh_token      String?  @db.Text
-  access_token       String?  @db.Text
-  expires_at         Int?
-  token_type         String?
-  scope              String?
-  id_token           String?  @db.Text
-  session_state      String?
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
