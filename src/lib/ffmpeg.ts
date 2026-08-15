@@ -6,6 +6,7 @@ import path from 'path'
 export const transcodeAndUpload = async (inputFilePath: string, videoId: string) => {
   await initBuckets()
   let thumbnailUrl: string | null = null
+  const workDir = path.dirname(inputFilePath)
 
   const resolutions = [
     { name: '480p', width: 854, height: 480 },
@@ -15,7 +16,7 @@ export const transcodeAndUpload = async (inputFilePath: string, videoId: string)
 
   for (const res of resolutions) {
     const outputFileName = `${videoId}-${res.name}.mp4`
-    const outputFilePath = path.join('/tmp', outputFileName)
+    const outputFilePath = path.join(workDir, outputFileName)
 
     await new Promise((resolve, reject) => {
       ffmpeg(inputFilePath)
@@ -51,13 +52,13 @@ export const transcodeAndUpload = async (inputFilePath: string, videoId: string)
 
   // Generate thumbnail from first frame
   const thumbName = `${videoId}-thumb.jpg`
-  const thumbPath = path.join('/tmp', thumbName)
+  const thumbPath = path.join(workDir, thumbName)
   await new Promise((resolve, reject) => {
     ffmpeg(inputFilePath)
       .screenshots({
         timestamps: ['00:00:01'],
         filename: thumbName,
-        folder: '/tmp',
+        folder: workDir,
         size: '1280x720'
       })
       .on('end', async () => {

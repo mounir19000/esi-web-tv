@@ -4,6 +4,7 @@ import { canViewScopedContent, type Viewer } from "@/lib/content-access"
 export type AuthorizedVideo = {
   id: string
   isPublic: boolean
+  status: string
   url: string
   thumbnailUrl: string | null
   uploaderId: string
@@ -24,6 +25,7 @@ export async function authorizeVideoAccess(videoId: string, viewer: Viewer): Pro
     select: {
       id: true,
       isPublic: true,
+      status: true,
       url: true,
       thumbnailUrl: true,
       uploaderId: true,

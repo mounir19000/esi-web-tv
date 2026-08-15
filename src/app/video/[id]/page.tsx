@@ -1,9 +1,12 @@
 import Link from "next/link"
+import { revalidatePath } from "next/cache"
 import { notFound, redirect } from "next/navigation"
+import { VideoStatus } from "@prisma/client"
 import { auth } from "@/auth"
 import prisma from "@/lib/prisma"
-import { canViewScopedContent, visibleVideoWhere } from "@/lib/content-access"
+import { canManageUserContent, canViewScopedContent, visibleVideoWhere } from "@/lib/content-access"
 import { getVideoPlaybackUrl, getVideoThumbnailUrl } from "@/lib/media"
+import { retryVideoProcessing } from "@/lib/media-queue"
 import { VideoCard } from "@/components/ContentCards"
 
 export const dynamic = "force-dynamic"
@@ -22,6 +25,25 @@ function formatDate(date: Date) {
   }).format(date)
 }
 
+async function retryProcessing(formData: FormData) {
+  "use server"
+
+  const session = await auth()
+  const videoId = String(formData.get("videoId") || "")
+  const video = await prisma.video.findUnique({
+    where: { id: videoId },
+    select: { uploaderId: true },
+  })
+
+  if (!video || !canManageUserContent(video.uploaderId, session?.user)) {
+    throw new Error("Unauthorized")
+  }
+
+  await retryVideoProcessing(videoId)
+  revalidatePath(`/video/${videoId}`)
+  redirect(`/video/${videoId}`)
+}
+
 export default async function VideoPage({ params }: VideoPageProps) {
   const { id } = await params
   const session = await auth()
@@ -38,8 +60,14 @@ export default async function VideoPage({ params }: VideoPageProps) {
     redirect(session?.user ? "/explore" : `/login?callbackUrl=/video/${id}`)
   }
 
-  const mediaUrl = getVideoPlaybackUrl(video.id, video.url)
-  const posterUrl = getVideoThumbnailUrl(video.id, video.thumbnailUrl)
+  const canManageVideo = canManageUserContent(video.uploaderId, session?.user)
+  if (video.status !== VideoStatus.READY && !canManageVideo) {
+    redirect(session?.user ? "/explore" : `/login?callbackUrl=/video/${id}`)
+  }
+
+  const isReady = video.status === VideoStatus.READY
+  const mediaUrl = isReady ? getVideoPlaybackUrl(video.id, video.url) : null
+  const posterUrl = isReady ? getVideoThumbnailUrl(video.id, video.thumbnailUrl) : null
   const relatedWhere = video.moduleId
     ? { AND: [visibleVideoWhere(session?.user), { id: { not: video.id } }, { moduleId: video.moduleId }] }
     : { AND: [visibleVideoWhere(session?.user), { id: { not: video.id } }] }
@@ -64,6 +92,7 @@ export default async function VideoPage({ params }: VideoPageProps) {
               <div>
                 <div className="meta-row">
                   <span className="badge badge-accent">{video.type}</span>
+                  {!isReady && <span className="badge">{video.status}</span>}
                   {video.isPublic && <span className="badge badge-success">Public</span>}
                   {video.module && <span className="badge">{video.module.yearGroup}</span>}
                 </div>
@@ -75,7 +104,23 @@ export default async function VideoPage({ params }: VideoPageProps) {
               <Link href="/explore" className="button-secondary">Back to Explore</Link>
             </div>
             {video.description && <p>{video.description}</p>}
-            {!posterUrl && <p className="field-hint">The video record is available while processing finishes.</p>}
+            {!isReady && (
+              <div className="alert">
+                {video.status === VideoStatus.FAILED
+                  ? "Processing failed. The upload is saved, but it is not available for playback."
+                  : "Processing is queued. Playback will appear here when the worker finishes."}
+              </div>
+            )}
+            {video.status === VideoStatus.FAILED && video.processingErrorMessage && (
+              <p className="field-hint">{video.processingErrorMessage}</p>
+            )}
+            {video.status === VideoStatus.FAILED && canManageVideo && video.sourceKey && (
+              <form action={retryProcessing}>
+                <input type="hidden" name="videoId" value={video.id} />
+                <button type="submit" className="button-secondary">Retry processing</button>
+              </form>
+            )}
+            {isReady && !posterUrl && <p className="field-hint">The video record is available while processing finishes.</p>}
           </div>
         </div>
 
