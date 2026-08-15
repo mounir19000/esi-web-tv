@@ -116,6 +116,7 @@ npm run test:livekit-smoke
 npm run reconcile:livekit
 DOTENV_CONFIG_PATH=.env.local npm run db:seed-listing-fixtures
 DOTENV_CONFIG_PATH=.env.local npm run db:explain-listings
+npm run ops:prod-config
 DOTENV_CONFIG_PATH=.env.local npx prisma migrate deploy
 DOTENV_CONFIG_PATH=.env.local npx prisma db seed
 DOTENV_CONFIG_PATH=.env.local npm run bootstrap:admin
@@ -135,6 +136,20 @@ The included Docker Compose file starts:
 | Media worker | `npm run worker:media` |
 | LiveKit | `ws://localhost:7880` |
 | LiveKit Egress | Docker Compose worker |
+
+## Production Operations
+
+Production deployment uses `compose.prod.yml` with non-root app and worker images, private internal service networks, Caddy TLS reverse proxying, LiveKit RTC/TURN edge ports, health checks, resource limits, Prometheus scrape config, and PostgreSQL/MinIO backup and restore scripts.
+
+Read [Production Operations](docs/production-operations.md) before exposing the service publicly:
+
+```bash
+npm run ops:prod-config
+docker compose --env-file .env.production -f compose.prod.yml build app media-worker
+docker compose --env-file .env.production -f compose.prod.yml up -d
+ENV_FILE=.env.production ./scripts/backup-postgres.sh
+ENV_FILE=.env.production ./scripts/backup-minio.sh
+```
 
 ## LiveKit Deployment Notes
 

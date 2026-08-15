@@ -41,13 +41,24 @@ fi
 
 config_path="${LIVEKIT_CONFIG_PATH:-/etc/livekit/livekit.yaml}"
 key_file="${LIVEKIT_KEY_FILE:-/tmp/livekit.keys}"
+runtime_config="${LIVEKIT_RUNTIME_CONFIG:-/tmp/livekit.runtime.yaml}"
 
 if [ ! -r "$config_path" ]; then
   echo "LiveKit configuration error: config file is not readable." >&2
   exit 1
 fi
 
-runtime_config="$config_path"
+cp "$config_path" "$runtime_config"
+
+if grep -q "__TURN_DOMAIN__" "$runtime_config"; then
+  required TURN_DOMAIN "${TURN_DOMAIN:-}"
+  if contains_newline "$TURN_DOMAIN"; then
+    echo "LiveKit configuration error: TURN_DOMAIN must be a single-line value." >&2
+    exit 1
+  fi
+  sed -i "s/__TURN_DOMAIN__/$TURN_DOMAIN/g" "$runtime_config"
+fi
+
 if [ -n "${LIVEKIT_WEBHOOK_URL:-}" ]; then
   if contains_newline "$LIVEKIT_WEBHOOK_URL"; then
     echo "LiveKit configuration error: LIVEKIT_WEBHOOK_URL must be a single-line value." >&2
@@ -69,8 +80,6 @@ if [ -n "${LIVEKIT_WEBHOOK_URL:-}" ]; then
       ;;
   esac
 
-  runtime_config="${LIVEKIT_RUNTIME_CONFIG:-/tmp/livekit.runtime.yaml}"
-  cp "$config_path" "$runtime_config"
   {
     printf "\nwebhook:\n"
     printf "  api_key: '%s'\n" "$LIVEKIT_API_KEY"

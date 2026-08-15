@@ -1,0 +1,38 @@
+groups:
+  - name: esi-web-tv
+    rules:
+      - alert: EsiWebTvDependencyDown
+        expr: esitv_dependency_up == 0
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: "ESI Web TV dependency is unhealthy"
+          description: "{{ $labels.dependency }} has failed readiness checks for more than two minutes."
+
+      - alert: EsiWebTvMediaQueueBacklog
+        expr: sum(esitv_media_queue_jobs{status=~"waiting|delayed"}) > 100
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Media processing backlog is growing"
+          description: "More than 100 media jobs are waiting or delayed for at least ten minutes."
+
+      - alert: EsiWebTvMediaFailures
+        expr: esitv_video_failures > 0
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Videos are stuck in FAILED state"
+          description: "At least one video has remained failed for more than fifteen minutes."
+
+      - alert: EsiWebTvNoActiveWorker
+        expr: esitv_video_processing > 0 and sum(esitv_media_queue_jobs{status="active"}) == 0
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: "Processing videos exist but no active worker job is visible"
+          description: "A worker may have stopped after claiming work."

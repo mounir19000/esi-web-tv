@@ -55,6 +55,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Production Compose config
+        run: npm run ops:prod-config
+
       - name: Unit tests
         run: npm run test:unit
 
