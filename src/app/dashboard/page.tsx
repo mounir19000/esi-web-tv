@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { StreamStatus } from "@prisma/client"
+import { ProvisioningStatus, StreamStatus } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { visibleLiveStreamWhere, visibleVideoWhere } from "@/lib/content-access"
 import { LiveStreamCard, VideoCard } from "@/components/ContentCards"
@@ -20,8 +20,9 @@ export default async function DashboardPage() {
   }
 
   const { role, name, email, yearGroup } = user
-  const isAdmin = role === "ADMIN"
-  const isTeacher = role === "TEACHER"
+  const isApproved = user.provisioningStatus === ProvisioningStatus.APPROVED
+  const isAdmin = isApproved && role === "ADMIN"
+  const isTeacher = isApproved && role === "TEACHER"
   const canCreate = isTeacher || isAdmin
 
   const ownVideoWhere = isAdmin

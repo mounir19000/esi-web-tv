@@ -166,7 +166,7 @@ export async function ensureLiveStreamRoom(stream: LiveStreamWithModule) {
 }
 
 export function canPublishToStream(stream: Pick<LiveStreamWithModule, "hostId">, user: CurrentUser | null | undefined) {
-  return Boolean(user?.role === Role.ADMIN || (user?.id === stream.hostId && user.role === Role.TEACHER))
+  return canManageUserContent(stream.hostId, user)
 }
 
 export function canJoinStreamRoom(stream: Pick<LiveStreamWithModule, "status" | "isLive" | "hostId">, user: CurrentUser | null | undefined) {
@@ -891,6 +891,7 @@ export async function publishRecording(recordingId: string, user: CurrentUser) {
       title: `${recording.stream.title} recording`,
       description: recording.stream.description,
       type: recording.stream.moduleId ? VideoType.TEACHING : VideoType.OTHER,
+      audience: recording.stream.audience,
       isPublic: recording.stream.isPublic,
       status: VideoStatus.PENDING,
       url: "",
@@ -898,6 +899,7 @@ export async function publishRecording(recordingId: string, user: CurrentUser) {
       sourceKey: recording.objectKey,
       uploaderId: recording.stream.hostId,
       ...(recording.stream.moduleId ? { moduleId: recording.stream.moduleId } : {}),
+      ...(recording.stream.cohortId ? { cohortId: recording.stream.cohortId } : {}),
     },
   })
 

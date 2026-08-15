@@ -79,8 +79,8 @@ export function UploadVideoForm({ modules }: { modules: ModuleOption[] }) {
         title: String(formData.get("title") || ""),
         description: String(formData.get("description") || ""),
         type: String(formData.get("type") || "OTHER"),
+        audience: String(formData.get("audience") || "ESI"),
         moduleId: String(formData.get("moduleId") || ""),
-        isPublic: formData.get("isPublic") === "on",
         file: {
           name: file.name,
           size: file.size,
@@ -279,22 +279,27 @@ export function UploadVideoForm({ modules }: { modules: ModuleOption[] }) {
         </div>
 
         <div className="field">
-          <label htmlFor="moduleId">Module</label>
-          <select id="moduleId" name="moduleId" className="form-select" defaultValue="" disabled={isBusy}>
-            <option value="">General</option>
-            {modules.map((module) => (
-              <option key={module.id} value={module.id}>
-                {module.yearGroup} · {module.name}
-              </option>
-            ))}
+          <label htmlFor="audience">Audience</label>
+          <select id="audience" name="audience" className="form-select" required defaultValue="ESI" disabled={isBusy}>
+            <option value="ESI">Signed-in ESI users</option>
+            <option value="MODULE">Selected module</option>
+            <option value="PUBLIC">Public visitors</option>
           </select>
         </div>
       </div>
 
-      <label className="checkbox-row">
-        <input type="checkbox" name="isPublic" disabled={isBusy} />
-        <span>Make this video public</span>
-      </label>
+      <div className="field">
+        <label htmlFor="moduleId">Module</label>
+        <select id="moduleId" name="moduleId" className="form-select" defaultValue="" disabled={isBusy}>
+          <option value="">General</option>
+          {modules.map((module) => (
+            <option key={module.id} value={module.id}>
+              {module.yearGroup} · {module.name}
+            </option>
+          ))}
+        </select>
+        <p className="field-hint">Required when the audience is the selected module.</p>
+      </div>
 
       <div className="field">
         <label htmlFor="file">MP4 file</label>

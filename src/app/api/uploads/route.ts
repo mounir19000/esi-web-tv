@@ -1,5 +1,6 @@
 import prisma from "@/lib/prisma"
 import { authErrorStatus, requireEducator } from "@/lib/current-user"
+import { canPublishToAudience, validateAudienceSelection } from "@/lib/content-access"
 import {
   allowedUploadVideoTypes,
   assertValidChecksum,
@@ -8,6 +9,7 @@ import {
   uploadMaxBytes,
 } from "@/lib/upload-policy"
 import { createUploadSession } from "@/lib/upload-sessions"
+import { AudienceType } from "@prisma/client"
 import { NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
@@ -16,6 +18,7 @@ type CreateUploadRequest = {
   title?: unknown
   description?: unknown
   type?: unknown
+  audience?: unknown
   moduleId?: unknown
   isPublic?: unknown
   file?: {
@@ -32,6 +35,10 @@ function jsonError(error: string, status: number) {
 
 function stringValue(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
+}
+
+function isAudienceType(value: string): value is AudienceType {
+  return Object.values(AudienceType).includes(value as AudienceType)
 }
 
 export async function POST(request: Request) {
@@ -57,6 +64,9 @@ export async function POST(request: Request) {
   const description = stringValue(body.description)
   const requestedType = stringValue(body.type) || "OTHER"
   const moduleId = stringValue(body.moduleId)
+  const fallbackAudience = body.isPublic === true ? AudienceType.PUBLIC : moduleId ? AudienceType.MODULE : AudienceType.ESI
+  const requestedAudience = stringValue(body.audience)
+  let audience: AudienceType = fallbackAudience
   const fileName = stringValue(body.file?.name)
   const expectedType = stringValue(body.file?.type)
   const expectedSize = Number(body.file?.size)
@@ -67,6 +77,13 @@ export async function POST(request: Request) {
 
   if (!isAllowedUploadVideoType(requestedType)) {
     return jsonError(`Video type must be one of: ${allowedUploadVideoTypes.join(", ")}`, 400)
+  }
+
+  if (requestedAudience && !isAudienceType(requestedAudience)) {
+    return jsonError(`Audience must be one of: ${Object.values(AudienceType).join(", ")}`, 400)
+  }
+  if (requestedAudience) {
+    audience = requestedAudience as AudienceType
   }
 
   if (!Number.isSafeInteger(expectedSize) || expectedSize <= 0) {
@@ -96,16 +113,23 @@ export async function POST(request: Request) {
     return jsonError("Selected module was not found", 400)
   }
 
+  const audienceError = validateAudienceSelection({ audience, moduleId: selectedModule?.id ?? null })
+  if (audienceError) {
+    return jsonError(audienceError, 400)
+  }
+
+  if (!canPublishToAudience(user, { audience, moduleId: selectedModule?.id ?? null })) {
+    return jsonError("You cannot publish to that audience", 403)
+  }
+
   try {
     const uploadSession = await createUploadSession({
       ownerId: user.id,
       title,
       description: description || null,
       type: requestedType,
-      isPublic:
-        body.isPublic === true ||
-        requestedType === "CLUB" ||
-        requestedType === "EXPLANATION",
+      audience,
+      isPublic: audience === AudienceType.PUBLIC,
       moduleId: selectedModule?.id ?? null,
       originalFileName: fileName || null,
       expectedSize,

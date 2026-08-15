@@ -1,8 +1,9 @@
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
+import { ProvisioningStatus } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/current-user"
-import { createUser, disableUser, updateUserRole } from "./actions"
+import { createUser, disableUser, updateUserAssignments, updateUserRole } from "./actions"
 
 export const dynamic = "force-dynamic"
 
@@ -12,13 +13,26 @@ export const metadata: Metadata = {
 
 export default async function UsersPage() {
   const currentUser = await getCurrentUser()
-  if (currentUser?.role !== "ADMIN") {
+  if (currentUser?.role !== "ADMIN" || currentUser.provisioningStatus !== ProvisioningStatus.APPROVED) {
     redirect("/dashboard")
   }
 
-  const users = await prisma.user.findMany({
-    orderBy: [{ role: "asc" }, { email: "asc" }],
-  })
+  const [users, modules, cohorts] = await Promise.all([
+    prisma.user.findMany({
+      orderBy: [{ role: "asc" }, { email: "asc" }],
+      include: {
+        cohortMemberships: { select: { cohortId: true } },
+        moduleEnrollments: { select: { moduleId: true } },
+        teacherAssignments: { select: { moduleId: true } },
+      },
+    }),
+    prisma.module.findMany({
+      orderBy: [{ yearGroup: "asc" }, { name: "asc" }],
+    }),
+    prisma.cohort.findMany({
+      orderBy: [{ yearGroup: "asc" }, { name: "asc" }],
+    }),
+  ])
 
   return (
     <main className="page">
@@ -81,6 +95,7 @@ export default async function UsersPage() {
                     <th>Name</th>
                     <th>Email</th>
                     <th>Role</th>
+                    <th>Status</th>
                     <th>Year</th>
                     <th>Actions</th>
                   </tr>
@@ -91,6 +106,7 @@ export default async function UsersPage() {
                       <td>{user.name || "Unnamed"}</td>
                       <td>{user.email}</td>
                       <td><span className="badge">{user.role}</span></td>
+                      <td><span className="badge">{user.provisioningStatus}</span></td>
                       <td>{user.yearGroup || "-"}</td>
                       <td>
                         {user.id === currentUser.id ? (
@@ -104,6 +120,18 @@ export default async function UsersPage() {
                                 <option value="STUDENT">Student</option>
                                 <option value="TEACHER">Teacher</option>
                                 <option value="ADMIN">Admin</option>
+                              </select>
+                              <select
+                                name="provisioningStatus"
+                                defaultValue={user.provisioningStatus}
+                                className="form-select"
+                                aria-label={`Provisioning status for ${user.email}`}
+                              >
+                                {Object.values(ProvisioningStatus).map((status) => (
+                                  <option key={status} value={status}>
+                                    {status}
+                                  </option>
+                                ))}
                               </select>
                               <input
                                 name="yearGroup"
@@ -126,6 +154,61 @@ export default async function UsersPage() {
                             ) : (
                               <span className="muted small">Disabled</span>
                             )}
+                            <details className="assignment-details">
+                              <summary>Assignments</summary>
+                              <form action={updateUserAssignments} className="form-stack assignment-form">
+                                <input type="hidden" name="id" value={user.id} />
+                                {cohorts.length > 0 && (
+                                  <fieldset className="assignment-fieldset">
+                                    <legend>Cohorts</legend>
+                                    {cohorts.map((cohort) => (
+                                      <label key={cohort.id} className="checkbox-row">
+                                        <input
+                                          type="checkbox"
+                                          name="cohortId"
+                                          value={cohort.id}
+                                          defaultChecked={user.cohortMemberships.some((membership) => membership.cohortId === cohort.id)}
+                                        />
+                                        <span>{cohort.name}</span>
+                                      </label>
+                                    ))}
+                                  </fieldset>
+                                )}
+                                {user.role === "STUDENT" && (
+                                  <fieldset className="assignment-fieldset">
+                                    <legend>Student modules</legend>
+                                    {modules.map((module) => (
+                                      <label key={module.id} className="checkbox-row">
+                                        <input
+                                          type="checkbox"
+                                          name="studentModuleId"
+                                          value={module.id}
+                                          defaultChecked={user.moduleEnrollments.some((enrollment) => enrollment.moduleId === module.id)}
+                                        />
+                                        <span>{module.yearGroup} · {module.name}</span>
+                                      </label>
+                                    ))}
+                                  </fieldset>
+                                )}
+                                {user.role === "TEACHER" && (
+                                  <fieldset className="assignment-fieldset">
+                                    <legend>Teacher modules</legend>
+                                    {modules.map((module) => (
+                                      <label key={module.id} className="checkbox-row">
+                                        <input
+                                          type="checkbox"
+                                          name="teacherModuleId"
+                                          value={module.id}
+                                          defaultChecked={user.teacherAssignments.some((assignment) => assignment.moduleId === module.id)}
+                                        />
+                                        <span>{module.yearGroup} · {module.name}</span>
+                                      </label>
+                                    ))}
+                                  </fieldset>
+                                )}
+                                <button type="submit" className="button-quiet">Save assignments</button>
+                              </form>
+                            </details>
                           </div>
                         )}
                       </td>
@@ -133,7 +216,7 @@ export default async function UsersPage() {
                   ))}
                   {users.length === 0 && (
                     <tr>
-                      <td colSpan={5}>No users found.</td>
+                      <td colSpan={6}>No users found.</td>
                     </tr>
                   )}
                 </tbody>

@@ -42,6 +42,10 @@ export default async function LiveRoomPage({ params }: LiveRoomPageProps) {
     include: {
       host: true,
       module: true,
+      cohort: true,
+      liveStreamAudienceUsers: {
+        select: { userId: true },
+      },
       recordings: {
         orderBy: { createdAt: "desc" },
         include: { publishedVideo: true },

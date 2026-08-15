@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test"
-import { Role } from "@prisma/client"
+import { ProvisioningStatus, Role } from "@prisma/client"
 import bcrypt from "bcryptjs"
 import { randomUUID } from "node:crypto"
 import prisma from "../src/lib/prisma"
@@ -21,11 +21,41 @@ export async function createTestUser(role: Role, label: string, yearGroup: strin
       password: hashedPassword,
       role,
       yearGroup: role === Role.STUDENT ? yearGroup ?? "1CP" : null,
+      provisioningStatus: ProvisioningStatus.APPROVED,
       isActive: true,
       disabledAt: null,
     },
     select: { id: true, name: true, email: true },
   })
+
+  if (role === Role.STUDENT) {
+    const resolvedYearGroup = yearGroup ?? "1CP"
+    const cohort = await prisma.cohort.upsert({
+      where: { name: resolvedYearGroup },
+      update: { yearGroup: resolvedYearGroup },
+      create: { name: resolvedYearGroup, yearGroup: resolvedYearGroup },
+    })
+    const modules = await prisma.module.findMany({
+      where: { yearGroup: resolvedYearGroup },
+      select: { id: true },
+    })
+
+    await prisma.cohortMembership.create({
+      data: { userId: user.id, cohortId: cohort.id },
+    })
+    await prisma.studentModuleEnrollment.createMany({
+      data: modules.map((module) => ({ userId: user.id, moduleId: module.id })),
+      skipDuplicates: true,
+    })
+  }
+
+  if (role === Role.TEACHER) {
+    const modules = await prisma.module.findMany({ select: { id: true } })
+    await prisma.teacherModuleAssignment.createMany({
+      data: modules.map((module) => ({ userId: user.id, moduleId: module.id })),
+      skipDuplicates: true,
+    })
+  }
 
   return { ...user, password: e2ePassword }
 }

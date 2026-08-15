@@ -1,5 +1,5 @@
 import type { DefaultSession } from "next-auth"
-import type { Role } from "@prisma/client"
+import type { ProvisioningStatus, Role } from "@prisma/client"
 
 declare module "next-auth" {
   /**
@@ -11,6 +11,7 @@ declare module "next-auth" {
       id: string
       role: Role
       yearGroup?: string | null
+      provisioningStatus?: ProvisioningStatus
       isActive?: boolean
       sessionVersion?: number
     } & DefaultSession["user"]
@@ -19,6 +20,7 @@ declare module "next-auth" {
   interface User {
     role?: Role
     yearGroup?: string | null
+    provisioningStatus?: ProvisioningStatus
     isActive?: boolean
     sessionVersion?: number
   }
@@ -28,6 +30,7 @@ declare module "next-auth/jwt" {
   interface JWT {
     role?: Role
     yearGroup?: string | null
+    provisioningStatus?: ProvisioningStatus
     isActive?: boolean
     revoked?: boolean
     sessionVersion?: number

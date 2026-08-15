@@ -1,7 +1,7 @@
 import "dotenv/config"
 
 import { test, expect } from "@playwright/test"
-import { AuditEventType, Role } from "@prisma/client"
+import { AuditEventType, ProvisioningStatus, Role } from "@prisma/client"
 import bcrypt from "bcryptjs"
 import { randomUUID } from "node:crypto"
 import { disableUserAccount, revokeUserSessions, updateUserRoleAndRevokeSessions } from "../src/lib/account-security"
@@ -65,11 +65,20 @@ async function createLocalUser(role: Role, label: string, yearGroup: string | nu
       password: hashedPassword,
       role,
       yearGroup,
+      provisioningStatus: ProvisioningStatus.APPROVED,
       isActive: true,
       disabledAt: null,
     },
     select: { id: true, email: true },
   })
+
+  if (role === Role.TEACHER) {
+    const modules = await prisma.module.findMany({ select: { id: true } })
+    await prisma.teacherModuleAssignment.createMany({
+      data: modules.map((module) => ({ userId: user.id, moduleId: module.id })),
+      skipDuplicates: true,
+    })
+  }
 
   return { ...user, password }
 }

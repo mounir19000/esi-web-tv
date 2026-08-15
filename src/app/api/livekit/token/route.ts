@@ -32,7 +32,13 @@ export async function GET(req: NextRequest) {
 
   const stream = await prisma.liveStream.findUnique({
     where: { streamKey: room },
-    include: { module: true },
+    include: {
+      module: true,
+      cohort: true,
+      liveStreamAudienceUsers: {
+        select: { userId: true },
+      },
+    },
   })
 
   if (!stream) {

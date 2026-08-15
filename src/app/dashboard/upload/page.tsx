@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
+import { ProvisioningStatus } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { UploadVideoForm } from "@/components/UploadVideoForm"
 import { getCurrentUser } from "@/lib/current-user"
@@ -15,11 +16,16 @@ export default async function UploadVideoPage() {
   if (!user) {
     redirect("/login?callbackUrl=/dashboard/upload")
   }
-  if (user.role !== "TEACHER" && user.role !== "ADMIN") {
+  if (
+    user.provisioningStatus !== ProvisioningStatus.APPROVED ||
+    (user.role !== "TEACHER" && user.role !== "ADMIN")
+  ) {
     redirect("/dashboard")
   }
 
+  const assignedModuleIds = user.teacherAssignments.map((assignment) => assignment.moduleId)
   const modules = await prisma.module.findMany({
+    where: user.role === "ADMIN" ? {} : { id: { in: assignedModuleIds } },
     orderBy: [{ yearGroup: "asc" }, { name: "asc" }],
   })
 

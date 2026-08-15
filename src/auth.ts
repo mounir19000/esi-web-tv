@@ -5,7 +5,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter"
 import prisma from "./lib/prisma"
 import bcrypt from "bcryptjs"
 import CredentialsProvider from "next-auth/providers/credentials"
-import { AuditEventType } from "@prisma/client"
+import { AuditEventType, ProvisioningStatus } from "@prisma/client"
 import { recordAuditEvent } from "./lib/audit"
 import { appConfig } from "./lib/env"
 
@@ -14,6 +14,10 @@ const roles = ["GUEST", "STUDENT", "TEACHER", "ADMIN"] as const
 
 function isRole(value: unknown): value is (typeof roles)[number] {
   return typeof value === "string" && roles.includes(value as (typeof roles)[number])
+}
+
+function isProvisioningStatus(value: unknown): value is ProvisioningStatus {
+  return typeof value === "string" && Object.values(ProvisioningStatus).includes(value as ProvisioningStatus)
 }
 
 const providers: Provider[] = [
@@ -41,6 +45,7 @@ const providers: Provider[] = [
           password: true,
           role: true,
           yearGroup: true,
+          provisioningStatus: true,
           isActive: true,
           disabledAt: true,
           sessionVersion: true,
@@ -62,6 +67,7 @@ const providers: Provider[] = [
         image: userRecord.image,
         role: userRecord.role,
         yearGroup: userRecord.yearGroup,
+        provisioningStatus: userRecord.provisioningStatus,
         isActive: userRecord.isActive,
         sessionVersion: userRecord.sessionVersion,
       }
@@ -124,6 +130,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           id: true,
           role: true,
           yearGroup: true,
+          provisioningStatus: true,
           isActive: true,
           disabledAt: true,
           sessionVersion: true,
@@ -154,8 +161,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       token.sub = userRecord.id
       token.revoked = false
       token.isActive = true
-      token.role = userRecord.role
+      token.role = userRecord.provisioningStatus === ProvisioningStatus.APPROVED ? userRecord.role : "GUEST"
       token.yearGroup = userRecord.yearGroup
+      token.provisioningStatus = userRecord.provisioningStatus
       token.sessionVersion = userRecord.sessionVersion
       return token
     },
@@ -164,6 +172,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.id = token.sub as string
         session.user.role = isRole(token.role) ? token.role : "GUEST"
         session.user.yearGroup = typeof token.yearGroup === "string" ? token.yearGroup : null
+        session.user.provisioningStatus = isProvisioningStatus(token.provisioningStatus)
+          ? token.provisioningStatus
+          : ProvisioningStatus.PENDING
         session.user.isActive = token.isActive !== false
         session.user.sessionVersion =
           typeof token.sessionVersion === "number" ? token.sessionVersion : undefined
@@ -171,6 +182,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.id = ""
         session.user.role = "GUEST"
         session.user.yearGroup = null
+        session.user.provisioningStatus = ProvisioningStatus.PENDING
         session.user.isActive = false
         session.user.sessionVersion = undefined
       }
@@ -178,6 +190,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     }
   },
   events: {
+    async createUser({ user }) {
+      if (user.id) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            role: "GUEST",
+            yearGroup: null,
+            provisioningStatus: ProvisioningStatus.PENDING,
+          },
+        })
+      }
+    },
     async signIn({ user }) {
       if (user.id) {
         await recordAuditEvent({

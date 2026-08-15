@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import Link from "next/link"
+import { ProvisioningStatus } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { visibleLiveStreamWhere } from "@/lib/content-access"
 import { LiveStreamCard } from "@/components/ContentCards"
@@ -13,7 +14,9 @@ export const metadata: Metadata = {
 
 export default async function LiveChannelsPage() {
   const user = await getCurrentUser()
-  const canCreate = user?.role === "TEACHER" || user?.role === "ADMIN"
+  const canCreate =
+    user?.provisioningStatus === ProvisioningStatus.APPROVED &&
+    (user.role === "TEACHER" || user.role === "ADMIN")
 
   const activeStreams = await prisma.liveStream.findMany({
     where: { isLive: true, ...visibleLiveStreamWhere(user) },
