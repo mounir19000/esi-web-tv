@@ -40,6 +40,33 @@ enum VideoStatus {
   DELETING
 }
 
+enum ThumbnailStatus {
+  PENDING
+  READY
+  FAILED
+  SKIPPED
+}
+
+enum VideoVariantStatus {
+  READY
+  FAILED
+}
+
+enum MediaAssetType {
+  SOURCE
+  HLS_MASTER
+  HLS_VARIANT_PLAYLIST
+  HLS_SEGMENT
+  THUMBNAIL
+  CAPTION
+}
+
+enum MediaAssetStatus {
+  PENDING
+  READY
+  FAILED
+}
+
 enum StreamStatus {
   DRAFT
   STARTING
@@ -123,25 +150,36 @@ model Module {
 }
 
 model Video {
-  id                      String      @id @default(cuid())
+  id                      String          @id @default(cuid())
   title                   String
   description             String?
   type                    VideoType
-  isPublic                Boolean     @default(false)
-  status                  VideoStatus @default(READY)
+  isPublic                Boolean         @default(false)
+  status                  VideoStatus     @default(READY)
   url                     String // MinIO URL or path
   thumbnailUrl            String?
   sourceKey               String?
-  processingVersion       Int         @default(1)
-  processingAttempts      Int         @default(0)
+  durationSeconds         Float?
+  width                   Int?
+  height                  Int?
+  videoCodec              String?
+  audioCodec              String?
+  container               String?
+  bitrate                 Int?
+  sourceSizeBytes         BigInt?
+  sourceChecksumSha256    String?
+  sourceContentType       String?
+  thumbnailStatus         ThumbnailStatus @default(PENDING)
+  processingVersion       Int             @default(1)
+  processingAttempts      Int             @default(0)
   processingErrorCode     String?
   processingErrorMessage  String?
   queuedAt                DateTime?
   processingStartedAt     DateTime?
   processingCompletedAt   DateTime?
   processingWorkerVersion String?
-  createdAt               DateTime    @default(now())
-  updatedAt               DateTime    @updatedAt
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
 
   uploaderId String
   uploader   User   @relation("Uploader", fields: [uploaderId], references: [id], onDelete: Restrict)
@@ -149,7 +187,9 @@ model Video {
   moduleId String?
   module   Module? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
 
-  publishedRecording Recording? @relation("PublishedRecording")
+  publishedRecording Recording?     @relation("PublishedRecording")
+  variants           VideoVariant[]
+  mediaAssets        MediaAsset[]
 
   @@index([status, createdAt])
   @@index([uploaderId, status])
@@ -157,6 +197,54 @@ model Video {
   @@index([type, status, createdAt])
   @@index([moduleId, status, createdAt])
   @@index([uploaderId, createdAt])
+}
+
+model VideoVariant {
+  id          String             @id @default(cuid())
+  label       String
+  width       Int
+  height      Int
+  bitrate     Int
+  codec       String
+  playlistKey String             @unique
+  status      VideoVariantStatus @default(READY)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  videoId String
+  video   Video  @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  mediaAssets MediaAsset[]
+
+  @@unique([videoId, label])
+  @@index([videoId, height])
+}
+
+model MediaAsset {
+  id             String           @id @default(cuid())
+  type           MediaAssetType
+  status         MediaAssetStatus @default(READY)
+  storageKey     String           @unique
+  contentType    String
+  sizeBytes      BigInt
+  checksumSha256 String
+  language       String?
+  label          String?
+  isDefault      Boolean          @default(false)
+  errorCode      String?
+  errorMessage   String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  videoId String
+  video   Video  @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  variantId String?
+  variant   VideoVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@index([videoId, type, status])
+  @@index([variantId, type])
+  @@index([type, status])
 }
 
 model UploadSession {
