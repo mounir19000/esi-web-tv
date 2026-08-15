@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:15-alpine
@@ -56,13 +54,27 @@ services:
       - redis
 
   livekit:
-    image: livekit/livekit-server:latest
+    image: livekit/livekit-server:v1.13.4@sha256:189f7c81b704a36642bc5c7e2d3e1ae83744627c11978a23a251bf19fbec64e0
     restart: always
-    command: --dev --keys devkey:secret
+    entrypoint: ["sh", "/usr/local/bin/start-livekit.sh"]
+    environment:
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY in .env}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET in .env}
+      LIVEKIT_CONFIG_PATH: /etc/livekit/livekit.yaml
+      LIVEKIT_KEY_FILE: /tmp/livekit.keys
     ports:
       - "7880:7880"
       - "7881:7881"
       - "7882:7882/udp"
+    volumes:
+      - ./livekit.yaml:/etc/livekit/livekit.yaml:ro
+      - ./scripts/start-livekit.sh:/usr/local/bin/start-livekit.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7880/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
 
 volumes:
   pgdata:
