@@ -1,5 +1,5 @@
-import { auth } from "@/auth"
 import prisma from "@/lib/prisma"
+import { authErrorStatus, requireEducator } from "@/lib/current-user"
 import { completeUploadSession } from "@/lib/upload-sessions"
 import { NextResponse } from "next/server"
 
@@ -14,9 +14,15 @@ function jsonError(error: string, status: number) {
 }
 
 export async function POST(_request: Request, context: { params: Promise<UploadSessionRouteParams> }) {
-  const session = await auth()
-  if (!session?.user) {
-    return jsonError("Sign in required", 401)
+  let user: Awaited<ReturnType<typeof requireEducator>>
+  try {
+    user = await requireEducator()
+  } catch (error) {
+    const status = authErrorStatus(error)
+    if (status) {
+      return jsonError(status === 401 ? "Sign in required" : "Forbidden", status)
+    }
+    throw error
   }
 
   const { sessionId } = await context.params
@@ -29,12 +35,12 @@ export async function POST(_request: Request, context: { params: Promise<UploadS
     return jsonError("Upload session not found", 404)
   }
 
-  if (uploadSession.ownerId !== session.user.id) {
+  if (uploadSession.ownerId !== user.id) {
     return jsonError("Forbidden", 403)
   }
 
   try {
-    const video = await completeUploadSession(sessionId, session.user.id)
+    const video = await completeUploadSession(sessionId, user.id)
     if (!video) {
       return jsonError("Upload session not found", 404)
     }

@@ -1,10 +1,10 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { auth } from "@/auth"
 import prisma from "@/lib/prisma"
 import { visibleLiveStreamWhere, visibleVideoWhere } from "@/lib/content-access"
 import { LiveStreamCard, VideoCard } from "@/components/ContentCards"
+import { getCurrentUser } from "@/lib/current-user"
 
 export const dynamic = "force-dynamic"
 
@@ -13,12 +13,12 @@ export const metadata: Metadata = {
 }
 
 export default async function DashboardPage() {
-  const session = await auth()
-  if (!session?.user) {
+  const user = await getCurrentUser()
+  if (!user) {
     redirect("/login?callbackUrl=/dashboard")
   }
 
-  const { role, name, email, yearGroup } = session.user
+  const { role, name, email, yearGroup } = user
   const isAdmin = role === "ADMIN"
   const isTeacher = role === "TEACHER"
   const canCreate = isTeacher || isAdmin
@@ -26,8 +26,8 @@ export default async function DashboardPage() {
   const ownVideoWhere = isAdmin
     ? {}
     : isTeacher
-      ? { uploaderId: session.user.id }
-      : visibleVideoWhere(session.user)
+      ? { uploaderId: user.id }
+      : visibleVideoWhere(user)
 
   const [videoCount, liveCount, userCount, recentVideos, liveStreams] = await Promise.all([
     prisma.video.count({ where: ownVideoWhere }),
@@ -35,8 +35,8 @@ export default async function DashboardPage() {
       where: canCreate
         ? isAdmin
           ? {}
-          : { hostId: session.user.id }
-        : { isLive: true, ...visibleLiveStreamWhere(session.user) },
+          : { hostId: user.id }
+        : { isLive: true, ...visibleLiveStreamWhere(user) },
     }),
     isAdmin ? prisma.user.count() : Promise.resolve(0),
     prisma.video.findMany({
@@ -49,8 +49,8 @@ export default async function DashboardPage() {
       where: canCreate
         ? isAdmin
           ? { isLive: true }
-          : { isLive: true, hostId: session.user.id }
-        : { isLive: true, ...visibleLiveStreamWhere(session.user) },
+          : { isLive: true, hostId: user.id }
+        : { isLive: true, ...visibleLiveStreamWhere(user) },
       orderBy: { startedAt: "desc" },
       take: 3,
       include: { host: true, module: true },

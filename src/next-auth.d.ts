@@ -11,12 +11,16 @@ declare module "next-auth" {
       id: string
       role: Role
       yearGroup?: string | null
+      isActive?: boolean
+      sessionVersion?: number
     } & DefaultSession["user"]
   }
 
   interface User {
     role?: Role
     yearGroup?: string | null
+    isActive?: boolean
+    sessionVersion?: number
   }
 }
 
@@ -24,5 +28,8 @@ declare module "next-auth/jwt" {
   interface JWT {
     role?: Role
     yearGroup?: string | null
+    isActive?: boolean
+    revoked?: boolean
+    sessionVersion?: number
   }
 }

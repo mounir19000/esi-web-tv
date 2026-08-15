@@ -2,9 +2,9 @@ import Link from "next/link"
 import { revalidatePath } from "next/cache"
 import { notFound, redirect } from "next/navigation"
 import { VideoStatus } from "@prisma/client"
-import { auth } from "@/auth"
 import prisma from "@/lib/prisma"
 import { canManageUserContent, canViewScopedContent, visibleVideoWhere } from "@/lib/content-access"
+import { getCurrentUser, requireUser } from "@/lib/current-user"
 import { getVideoPlaybackUrl, getVideoThumbnailUrl } from "@/lib/media"
 import { retryVideoProcessing } from "@/lib/media-queue"
 import { VideoCard } from "@/components/ContentCards"
@@ -28,14 +28,14 @@ function formatDate(date: Date) {
 async function retryProcessing(formData: FormData) {
   "use server"
 
-  const session = await auth()
+  const user = await requireUser()
   const videoId = String(formData.get("videoId") || "")
   const video = await prisma.video.findUnique({
     where: { id: videoId },
     select: { uploaderId: true },
   })
 
-  if (!video || !canManageUserContent(video.uploaderId, session?.user)) {
+  if (!video || !canManageUserContent(video.uploaderId, user)) {
     throw new Error("Unauthorized")
   }
 
@@ -46,7 +46,7 @@ async function retryProcessing(formData: FormData) {
 
 export default async function VideoPage({ params }: VideoPageProps) {
   const { id } = await params
-  const session = await auth()
+  const user = await getCurrentUser()
   const video = await prisma.video.findUnique({
     where: { id },
     include: { uploader: true, module: true },
@@ -56,21 +56,21 @@ export default async function VideoPage({ params }: VideoPageProps) {
     notFound()
   }
 
-  if (!canViewScopedContent(video, session?.user)) {
-    redirect(session?.user ? "/explore" : `/login?callbackUrl=/video/${id}`)
+  if (!canViewScopedContent(video, user)) {
+    redirect(user ? "/explore" : `/login?callbackUrl=/video/${id}`)
   }
 
-  const canManageVideo = canManageUserContent(video.uploaderId, session?.user)
+  const canManageVideo = canManageUserContent(video.uploaderId, user)
   if (video.status !== VideoStatus.READY && !canManageVideo) {
-    redirect(session?.user ? "/explore" : `/login?callbackUrl=/video/${id}`)
+    redirect(user ? "/explore" : `/login?callbackUrl=/video/${id}`)
   }
 
   const isReady = video.status === VideoStatus.READY
   const mediaUrl = isReady ? getVideoPlaybackUrl(video.id, video.url) : null
   const posterUrl = isReady ? getVideoThumbnailUrl(video.id, video.thumbnailUrl) : null
   const relatedWhere = video.moduleId
-    ? { AND: [visibleVideoWhere(session?.user), { id: { not: video.id } }, { moduleId: video.moduleId }] }
-    : { AND: [visibleVideoWhere(session?.user), { id: { not: video.id } }] }
+    ? { AND: [visibleVideoWhere(user), { id: { not: video.id } }, { moduleId: video.moduleId }] }
+    : { AND: [visibleVideoWhere(user), { id: { not: video.id } }] }
 
   const relatedVideos = await prisma.video.findMany({
     where: relatedWhere,

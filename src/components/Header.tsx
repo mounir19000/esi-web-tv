@@ -1,10 +1,10 @@
-import { auth } from "@/auth";
 import Link from "next/link";
 import Image from "next/image";
+import { getCurrentUser } from "@/lib/current-user";
 
 export default async function Header() {
-  const session = await auth();
-  const canCreate = session?.user?.role === "TEACHER" || session?.user?.role === "ADMIN";
+  const user = await getCurrentUser();
+  const canCreate = user?.role === "TEACHER" || user?.role === "ADMIN";
 
   return (
     <header className="site-header">
@@ -20,13 +20,13 @@ export default async function Header() {
         <nav className="primary-nav" aria-label="Main navigation">
           <Link href="/explore" className="nav-link">Explore</Link>
           <Link href="/live" className="nav-link">Live</Link>
-          {session?.user ? (
+          {user ? (
             <>
               <Link href="/dashboard" className="nav-link">Dashboard</Link>
               {canCreate && <Link href="/dashboard/upload" className="nav-link">Upload</Link>}
               {canCreate && <Link href="/live/new" className="nav-link">Go Live</Link>}
-              <span className="nav-link user-pill" title={session.user.email || session.user.name || "Signed in"}>
-                {session.user.name || session.user.email}
+              <span className="nav-link user-pill" title={user.email || user.name || "Signed in"}>
+                {user.name || user.email}
               </span>
               <form
                 action={async () => {

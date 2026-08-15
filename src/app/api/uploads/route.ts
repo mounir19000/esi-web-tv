@@ -1,6 +1,5 @@
-import { auth } from "@/auth"
 import prisma from "@/lib/prisma"
-import { isEducator } from "@/lib/content-access"
+import { authErrorStatus, requireEducator } from "@/lib/current-user"
 import {
   allowedUploadVideoTypes,
   assertValidChecksum,
@@ -36,13 +35,15 @@ function stringValue(value: unknown) {
 }
 
 export async function POST(request: Request) {
-  const session = await auth()
-  if (!session?.user) {
-    return jsonError("Sign in required", 401)
-  }
-
-  if (!isEducator(session.user.role)) {
-    return jsonError("Forbidden", 403)
+  let user: Awaited<ReturnType<typeof requireEducator>>
+  try {
+    user = await requireEducator()
+  } catch (error) {
+    const status = authErrorStatus(error)
+    if (status) {
+      return jsonError(status === 401 ? "Sign in required" : "Forbidden", status)
+    }
+    throw error
   }
 
   let body: CreateUploadRequest
@@ -97,7 +98,7 @@ export async function POST(request: Request) {
 
   try {
     const uploadSession = await createUploadSession({
-      ownerId: session.user.id,
+      ownerId: user.id,
       title,
       description: description || null,
       type: requestedType,

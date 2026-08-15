@@ -1,7 +1,10 @@
 import { VideoStatus, type Prisma, type Role } from "@prisma/client"
-import type { Session } from "next-auth"
 
-export type Viewer = Session["user"] | undefined | null
+export type Viewer = {
+  id?: string | null
+  role?: Role | null
+  yearGroup?: string | null
+} | undefined | null
 
 type ModuleScope = {
   yearGroup: string
@@ -19,7 +22,10 @@ export function isEducator(role?: Role | null) {
 }
 
 export function canManageUserContent(contentOwnerId: string, viewer: Viewer) {
-  return Boolean(viewer && (viewer.role === "ADMIN" || viewer.id === contentOwnerId))
+  return Boolean(
+    viewer &&
+      (viewer.role === "ADMIN" || (viewer.id === contentOwnerId && isEducator(viewer.role))),
+  )
 }
 
 export function canViewScopedContent(content: ScopedContent, viewer: Viewer) {

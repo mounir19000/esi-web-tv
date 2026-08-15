@@ -1,8 +1,8 @@
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
-import { auth } from "@/auth"
 import prisma from "@/lib/prisma"
 import { UploadVideoForm } from "@/components/UploadVideoForm"
+import { getCurrentUser } from "@/lib/current-user"
 
 export const dynamic = "force-dynamic"
 
@@ -11,11 +11,11 @@ export const metadata: Metadata = {
 }
 
 export default async function UploadVideoPage() {
-  const session = await auth()
-  if (!session?.user) {
+  const user = await getCurrentUser()
+  if (!user) {
     redirect("/login?callbackUrl=/dashboard/upload")
   }
-  if (session.user.role !== "TEACHER" && session.user.role !== "ADMIN") {
+  if (user.role !== "TEACHER" && user.role !== "ADMIN") {
     redirect("/dashboard")
   }
 
