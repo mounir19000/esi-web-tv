@@ -39,6 +39,11 @@ export type AppConfig = {
   }
   media: {
     signedUrlTtlSeconds: number
+    maxDurationSeconds: number
+    maxFramePixels: number
+    ffmpegTimeoutSeconds: number
+    ffmpegThreads: number
+    hlsSegmentSeconds: number
   }
   queue: {
     redisUrl: string
@@ -334,6 +339,11 @@ export function loadAppConfig(env: RuntimeEnv = process.env): AppConfig {
     issues,
   )
   const mediaWorkerConcurrency = parseInteger(env, "MEDIA_WORKER_CONCURRENCY", 1, 1, 64, issues)
+  const mediaMaxDurationSeconds = parseInteger(env, "MEDIA_MAX_DURATION_SECONDS", 4 * 60 * 60, 1, 8 * 60 * 60, issues)
+  const mediaMaxFramePixels = parseInteger(env, "MEDIA_MAX_FRAME_PIXELS", 3840 * 2160, 1, 7680 * 4320, issues)
+  const mediaFfmpegTimeoutSeconds = parseInteger(env, "MEDIA_FFMPEG_TIMEOUT_SECONDS", 60 * 60, 30, 6 * 60 * 60, issues)
+  const mediaFfmpegThreads = parseInteger(env, "MEDIA_FFMPEG_THREADS", 2, 1, 16, issues)
+  const mediaHlsSegmentSeconds = parseInteger(env, "MEDIA_HLS_SEGMENT_SECONDS", 6, 2, 30, issues)
   const allowDemoSeed = parseOptionalBoolean(env, "ALLOW_DEMO_SEED", false, issues)
   const livekitTokenTtlSeconds = parseInteger(env, "LIVEKIT_TOKEN_TTL_SECONDS", 10 * 60, 60, 60 * 60, issues)
   const livekitAnonymousTokenTtlSeconds = parseInteger(
@@ -400,6 +410,11 @@ export function loadAppConfig(env: RuntimeEnv = process.env): AppConfig {
     },
     media: {
       signedUrlTtlSeconds: mediaSignedUrlTtlSeconds,
+      maxDurationSeconds: mediaMaxDurationSeconds,
+      maxFramePixels: mediaMaxFramePixels,
+      ffmpegTimeoutSeconds: mediaFfmpegTimeoutSeconds,
+      ffmpegThreads: mediaFfmpegThreads,
+      hlsSegmentSeconds: mediaHlsSegmentSeconds,
     },
     queue: {
       redisUrl: parseUrl(env, "REDIS_URL", ["redis:", "rediss:"], issues),

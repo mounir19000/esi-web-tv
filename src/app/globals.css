@@ -594,6 +594,16 @@ video {
   margin-top: 4px;
 }
 
+.caption-form {
+  margin-top: 18px;
+}
+
+.caption-form-grid {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.6fr) minmax(0, 1.4fr);
+  gap: 12px;
+}
+
 .split-layout {
   display: grid;
   grid-template-columns: minmax(260px, 0.9fr) minmax(0, 1.6fr);
@@ -828,6 +838,7 @@ video {
   .grid-2,
   .grid-3,
   .grid-4,
+  .caption-form-grid,
   .stat-grid {
     grid-template-columns: 1fr;
   }

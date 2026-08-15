@@ -1,4 +1,5 @@
 import { VIDEO_BUCKET_NAME } from "@/lib/minio"
+import path from "node:path"
 
 export const MEDIA_OBJECT_PREFIXES = {
   staging: "staging/",
@@ -18,8 +19,22 @@ export function getVideoMediaUrl(videoId: string, asset: VideoMediaAsset) {
   return `/api/media/videos/${encodeURIComponent(videoId)}/${asset}`
 }
 
+export function getVideoHlsUrl(videoId: string, hlsPath = "master.m3u8") {
+  return `/api/media/videos/${encodeURIComponent(videoId)}/hls/${encodeHlsPath(hlsPath)}`
+}
+
+export function getVideoCaptionUrl(videoId: string, captionId: string) {
+  return `/api/media/videos/${encodeURIComponent(videoId)}/captions/${encodeURIComponent(captionId)}`
+}
+
 export function getVideoPlaybackUrl(videoId: string, storedObject?: string | null) {
-  return storedObject ? getVideoMediaUrl(videoId, "source") : null
+  if (!storedObject) {
+    return null
+  }
+
+  return isHlsManifestObjectKey(storedObject)
+    ? getVideoHlsUrl(videoId)
+    : getVideoMediaUrl(videoId, "source")
 }
 
 export function getVideoThumbnailUrl(videoId: string, storedObject?: string | null) {
@@ -45,6 +60,60 @@ function isSafeObjectKey(value: string) {
     !value.includes("\\") &&
     !value.split("/").some((segment) => segment === "..")
   )
+}
+
+export function isHlsManifestObjectKey(value: string) {
+  return value.endsWith(".m3u8") && value.includes("/hls/")
+}
+
+function encodeHlsPath(hlsPath: string) {
+  return hlsPath
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/")
+}
+
+export function resolveHlsObjectKey(videoId: string, hlsPath: string) {
+  const normalizedPath = path.posix.normalize(hlsPath.replace(/^\/+/, ""))
+  if (
+    !normalizedPath ||
+    normalizedPath === "." ||
+    normalizedPath.startsWith("../") ||
+    normalizedPath.includes("/../") ||
+    normalizedPath.includes("\\")
+  ) {
+    return null
+  }
+
+  return `${MEDIA_OBJECT_PREFIXES.readyVideo}${videoId}/hls/${normalizedPath}`
+}
+
+export function rewriteHlsPlaylist(videoId: string, playlistPath: string, playlist: string) {
+  const playlistDir = path.posix.dirname(playlistPath)
+
+  return playlist
+    .split(/\r?\n/)
+    .map((line) => {
+      const trimmedLine = line.trim()
+      if (!trimmedLine || trimmedLine.startsWith("#")) {
+        return line
+      }
+
+      if (/^[a-z][a-z0-9+.-]*:/i.test(trimmedLine)) {
+        return line
+      }
+
+      const [uriPath, uriQuery = ""] = trimmedLine.split("?", 2)
+      const relativePath = path.posix.normalize(path.posix.join(playlistDir, uriPath))
+      if (relativePath.startsWith("../") || relativePath.includes("/../")) {
+        return line
+      }
+
+      const rewritten = getVideoHlsUrl(videoId, relativePath)
+      return uriQuery ? `${rewritten}?${uriQuery}` : rewritten
+    })
+    .join("\n")
 }
 
 export function resolveStoredObjectKey(storedObject?: string | null) {

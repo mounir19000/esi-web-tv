@@ -11,7 +11,7 @@ ESI Web TV is a self-hosted web television platform for École nationale Supéri
 - Admin dashboard for creating, changing, and disabling users
 - Live streaming rooms powered by LiveKit
 - Video storage through MinIO
-- MP4 processing and thumbnail generation through FFmpeg
+- Source-aware HLS transcoding, thumbnail generation, and WebVTT caption playback through FFmpeg
 - PostgreSQL database with Prisma ORM
 - End-to-end Playwright tests for auth, upload, and live flows
 
@@ -149,11 +149,15 @@ npm run test:livekit-smoke
 
 ## Video Upload Notes
 
-Uploaded MP4 files use server-created multipart upload sessions. The browser uploads chunks directly to private MinIO staging with short-lived signed URLs, then the app finalizes the object and enqueues durable BullMQ media processing in Redis. A standalone media worker downloads staging objects, validates them with FFprobe, runs FFmpeg, publishes ready renditions, and updates video lifecycle state.
+Uploaded MP4 files use server-created multipart upload sessions. The browser uploads chunks directly to private MinIO staging with short-lived signed URLs, then the app finalizes the object and enqueues durable BullMQ media processing in Redis. A standalone media worker downloads staging objects, probes and validates them with FFprobe, runs bounded FFmpeg jobs, publishes adaptive HLS renditions, and updates video lifecycle state.
+
+The worker stores source metadata on `Video`, keeps the private source object as a tracked `SOURCE` media asset, and records every generated manifest, variant playlist, segment, thumbnail, and caption in `MediaAsset` or `VideoVariant`. The HLS ladder is generated only up to the source height, so low-resolution uploads are not upscaled. Aspect ratio is preserved with scale-only renditions; the player consumes the master manifest through authorized app routes.
+
+Thumbnail state is tracked separately from video readiness. A video can still become `READY` if thumbnail extraction fails, and owners/admins can retry processing from the saved source. Owners/admins can attach WebVTT caption files from the video page with language, label, and default-track metadata.
 
 Only `READY` videos appear in public and scoped library listings. Owners and admins can open processing or failed uploads directly and retry failed processing from the video page.
 
-The MinIO API endpoint must be reachable from the browser and allow CORS requests from the Next.js origin for `PUT`, `POST`, `DELETE`, `GET`, and `HEAD`. Expose the `ETag` header if you add client-side part verification.
+The MinIO API endpoint must be reachable from the browser and allow CORS requests from the Next.js origin for direct-upload `PUT`, `POST`, `DELETE`, `GET`, and `HEAD`. HLS manifests, HLS segments, and captions are served through protected app routes after authorization; large source fallbacks and thumbnails use short-lived signed redirects. Expose the `ETag` header if you add client-side part verification.
 
 The application and media worker use `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY`, not root credentials. Local Compose provisions a limited MinIO user through `scripts/init-minio.sh` and `config/minio/app-policy.json`; production should provision an equivalent service account out of band and rotate it separately from the root/admin account.
 
@@ -169,6 +173,8 @@ Make sure FFmpeg and FFprobe are installed on the host that runs the media worke
 ffmpeg -version
 ffprobe -version
 ```
+
+Tune `MEDIA_MAX_DURATION_SECONDS`, `MEDIA_MAX_FRAME_PIXELS`, `MEDIA_FFMPEG_TIMEOUT_SECONDS`, `MEDIA_FFMPEG_THREADS`, and `MEDIA_HLS_SEGMENT_SECONDS` for the worker host. These limits bound source complexity, FFmpeg execution time, CPU thread use, and segment duration.
 
 ## Secret Management
 

@@ -29,6 +29,11 @@ function baseEnv(overrides: RuntimeEnv = {}): RuntimeEnv {
     REDIS_URL: "redis://localhost:6379",
     MEDIA_WORKER_VERSION: "test-suite",
     MEDIA_WORKER_CONCURRENCY: "1",
+    MEDIA_MAX_DURATION_SECONDS: "14400",
+    MEDIA_MAX_FRAME_PIXELS: "8294400",
+    MEDIA_FFMPEG_TIMEOUT_SECONDS: "3600",
+    MEDIA_FFMPEG_THREADS: "2",
+    MEDIA_HLS_SEGMENT_SECONDS: "6",
     ...overrides,
   }
 }

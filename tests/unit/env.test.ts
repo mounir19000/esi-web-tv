@@ -28,6 +28,11 @@ function baseEnv(overrides: RuntimeEnv = {}): RuntimeEnv {
     REDIS_URL: "redis://localhost:6379",
     MEDIA_WORKER_VERSION: "test-suite",
     MEDIA_WORKER_CONCURRENCY: "1",
+    MEDIA_MAX_DURATION_SECONDS: "14400",
+    MEDIA_MAX_FRAME_PIXELS: "8294400",
+    MEDIA_FFMPEG_TIMEOUT_SECONDS: "3600",
+    MEDIA_FFMPEG_THREADS: "2",
+    MEDIA_HLS_SEGMENT_SECONDS: "6",
     ...overrides,
   }
 }
@@ -51,6 +56,11 @@ describe("loadAppConfig", () => {
     assert.equal(config.minio.secretKey, "test-minio-secret")
     assert.equal(config.minio.videoBucket, "esitv-videos")
     assert.equal(config.queue.mediaWorkerConcurrency, 1)
+    assert.equal(config.media.maxDurationSeconds, 14400)
+    assert.equal(config.media.maxFramePixels, 8294400)
+    assert.equal(config.media.ffmpegTimeoutSeconds, 3600)
+    assert.equal(config.media.ffmpegThreads, 2)
+    assert.equal(config.media.hlsSegmentSeconds, 6)
     assert.equal(config.livekit.tokenTtlSeconds, 600)
     assert.equal(config.livekit.anonymousTokenTtlSeconds, 120)
     assert.equal(config.livekit.recordingEnabled, false)
@@ -150,6 +160,18 @@ describe("loadAppConfig", () => {
     assert.throws(
       () => loadAppConfig(baseEnv({ LIVEKIT_PUBLIC_MAX_PARTICIPANTS: "101" })),
       /LIVEKIT_PUBLIC_MAX_PARTICIPANTS/,
+    )
+  })
+
+  it("rejects unsafe media processing limits", () => {
+    assert.throws(
+      () => loadAppConfig(baseEnv({ MEDIA_MAX_DURATION_SECONDS: "0" })),
+      /MEDIA_MAX_DURATION_SECONDS/,
+    )
+
+    assert.throws(
+      () => loadAppConfig(baseEnv({ MEDIA_FFMPEG_THREADS: "32" })),
+      /MEDIA_FFMPEG_THREADS/,
     )
   })
 
