@@ -20,6 +20,8 @@ function user(overrides: Partial<CurrentUser> = {}): CurrentUser {
     isActive: true,
     disabledAt: null,
     sessionVersion: 3,
+    createdAt: new Date("2026-08-15T00:00:00.000Z"),
+    updatedAt: new Date("2026-08-15T00:00:00.000Z"),
     ...overrides,
   }
 }

@@ -52,8 +52,12 @@ docker compose --env-file .env.local up -d
 Prepare the database:
 
 ```bash
-DOTENV_CONFIG_PATH=.env.local npx prisma db push
+DOTENV_CONFIG_PATH=.env.local npx prisma migrate deploy
 ```
+
+For an existing database that predates Prisma migrations, follow
+[Database Migrations And Retention](docs/database-migrations.md) before running
+deployments.
 
 Run the development server:
 
@@ -102,6 +106,7 @@ npm run lint
 npm run test:unit
 npm run test:livekit-smoke
 npx playwright test
+DOTENV_CONFIG_PATH=.env.local npx prisma migrate deploy
 DOTENV_CONFIG_PATH=.env.local npx prisma db seed
 DOTENV_CONFIG_PATH=.env.local npm run bootstrap:admin
 ```

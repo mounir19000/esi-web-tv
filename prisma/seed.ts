@@ -66,13 +66,16 @@ async function main() {
   ]
 
   for (const m of modules) {
-    const existingModule = await prisma.module.findFirst({
-      where: { name: m.name, yearGroup: m.yearGroup },
+    await prisma.module.upsert({
+      where: {
+        name_yearGroup: {
+          name: m.name,
+          yearGroup: m.yearGroup,
+        },
+      },
+      update: {},
+      create: m,
     })
-
-    if (!existingModule) {
-      await prisma.module.create({ data: m })
-    }
   }
   
   console.log('Modules seeded successfully!')
