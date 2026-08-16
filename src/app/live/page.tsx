@@ -56,7 +56,7 @@ export default async function LiveChannelsPage({ searchParams }: LiveChannelsPag
   const { items: activeStreams, nextCursor } = paginateDateCursorItems(streamRows, pageSize)
 
   return (
-    <main className="page">
+    <main id="main-content" className="page" tabIndex={-1}>
       <section className="container">
         <div className="section-header">
           <div>

@@ -98,7 +98,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
   const cohortsOverflow = cohortRows.length > moduleLimit
 
   return (
-    <main className="page">
+    <main id="main-content" className="page" tabIndex={-1}>
       <section className="container">
         <div className="section-header">
           <div>

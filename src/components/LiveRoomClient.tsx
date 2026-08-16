@@ -62,7 +62,7 @@ export default function LiveRoomClient({
 
   if (state.status === "loading") {
     return (
-      <div className="live-status">
+      <div className="live-status" role="status" aria-live="polite" aria-busy="true">
         <div>
           <h2 className="section-title">Joining room</h2>
           <p className="muted">Preparing your live session.</p>
@@ -73,7 +73,7 @@ export default function LiveRoomClient({
 
   if (state.status === "error") {
     return (
-      <div className="live-status">
+      <div className="live-status" role="alert">
         <div>
           <h2 className="section-title">Could not join</h2>
           <p className="muted">{state.message}</p>

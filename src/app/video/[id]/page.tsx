@@ -352,7 +352,7 @@ export default async function VideoPage({ params, searchParams }: VideoPageProps
   const manageableModulesOverflow = manageableModuleRows.length > moduleLimit
 
   return (
-    <main className="page">
+    <main id="main-content" className="page" tabIndex={-1}>
       <section className="container watch-layout">
         <div>
           <VideoPlayer sourceUrl={mediaUrl} posterUrl={posterUrl} captions={captionTracks} />
@@ -379,7 +379,11 @@ export default async function VideoPage({ params, searchParams }: VideoPageProps
             </div>
             {video.description && <p>{video.description}</p>}
             {!isReady && (
-              <div className="alert">
+              <div
+                className="alert"
+                role={video.status === VideoStatus.FAILED ? "alert" : "status"}
+                aria-live={video.status === VideoStatus.FAILED ? "assertive" : "polite"}
+              >
                 {video.status === VideoStatus.FAILED
                   ? "Processing failed. The upload is saved, but it is not available for playback."
                   : "Processing is queued. Playback will appear here when the worker finishes."}
@@ -389,7 +393,7 @@ export default async function VideoPage({ params, searchParams }: VideoPageProps
               <p className="field-hint">{video.processingErrorMessage}</p>
             )}
             {isReady && thumbnailNeedsRetry && (
-              <div className="alert">
+              <div className="alert" role="alert">
                 Thumbnail generation did not complete. Playback and captions remain available.
               </div>
             )}
@@ -486,7 +490,7 @@ export default async function VideoPage({ params, searchParams }: VideoPageProps
                 </div>
               </div>
 
-              {captionError && <div className="alert">{captionError}</div>}
+              {captionError && <div className="alert" role="alert">{captionError}</div>}
 
               {video.mediaAssets.length === 0 ? (
                 <p className="field-hint">No captions attached.</p>
@@ -505,7 +509,7 @@ export default async function VideoPage({ params, searchParams }: VideoPageProps
               )}
 
               {canManageVideo && (
-                <form action={attachCaption} encType="multipart/form-data" className="form-stack caption-form">
+                <form action={attachCaption} className="form-stack caption-form">
                   <input type="hidden" name="videoId" value={video.id} />
                   <div className="field">
                     <label htmlFor="caption">WebVTT file</label>
