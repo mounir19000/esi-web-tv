@@ -25,6 +25,10 @@ PostgreSQL, Redis, MinIO API, MinIO console, the app container, Prometheus, and 
    - `S3_DOMAIN` -> MinIO S3 API
    - `TURN_DOMAIN` -> TURN endpoint
 2. Create `.env.production` from `.env.production.example` and replace every placeholder secret.
+   Confirm these public origins before starting:
+   - `NEXTAUTH_URL` and `NEXT_PUBLIC_APP_URL` are `https://$APP_DOMAIN`
+   - `NEXT_PUBLIC_MEDIA_URL` is `https://$S3_DOMAIN`
+   - `NEXT_PUBLIC_LIVEKIT_URL` is `wss://$LIVEKIT_DOMAIN`
 3. Build the app and worker images:
 
 ```bash

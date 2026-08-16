@@ -9,6 +9,7 @@ function baseEnv(overrides: RuntimeEnv = {}): RuntimeEnv {
     DATABASE_URL: "postgresql://test_user:test_password@localhost:5433/esitvdb?schema=public",
     AUTH_SECRET: "test-auth-secret-with-at-least-32-characters",
     NEXTAUTH_URL: "http://localhost:3000",
+    NEXT_PUBLIC_APP_URL: "http://localhost:3000",
     LIVEKIT_API_KEY: "test-livekit-key",
     LIVEKIT_API_SECRET: "test-livekit-secret-with-at-least-32-chars",
     NEXT_PUBLIC_LIVEKIT_URL: "ws://localhost:7880",
@@ -25,6 +26,7 @@ function baseEnv(overrides: RuntimeEnv = {}): RuntimeEnv {
     MINIO_ACCESS_KEY: "test-minio-app",
     MINIO_SECRET_KEY: "test-minio-secret",
     MINIO_VIDEO_BUCKET: "esitv-videos",
+    NEXT_PUBLIC_MEDIA_URL: "http://localhost:9000",
     REDIS_URL: "redis://localhost:6379",
     MEDIA_WORKER_VERSION: "test-suite",
     MEDIA_WORKER_CONCURRENCY: "1",
@@ -55,6 +57,8 @@ describe("loadAppConfig", () => {
     assert.equal(config.minio.accessKey, "test-minio-app")
     assert.equal(config.minio.secretKey, "test-minio-secret")
     assert.equal(config.minio.videoBucket, "esitv-videos")
+    assert.equal(config.app.publicUrl, "http://localhost:3000")
+    assert.equal(config.media.publicUrl, "http://localhost:9000")
     assert.equal(config.queue.mediaWorkerConcurrency, 1)
     assert.equal(config.media.maxDurationSeconds, 14400)
     assert.equal(config.media.maxFramePixels, 8294400)
@@ -78,6 +82,7 @@ describe("loadAppConfig", () => {
       DATABASE_URL: "postgresql://prod_user:strong-db-password@db.example.edu:5432/esitvdb?schema=public",
       AUTH_SECRET: "prod-auth-random-value-32-characters-minimum",
       NEXTAUTH_URL: "https://web-tv.example.edu",
+      NEXT_PUBLIC_APP_URL: "https://web-tv.example.edu",
       LIVEKIT_API_KEY: "lk-prod-key",
       LIVEKIT_API_SECRET: "lk-prod-random-value-32-characters-minimum",
       NEXT_PUBLIC_LIVEKIT_URL: "wss://livekit.example.edu",
@@ -87,12 +92,15 @@ describe("loadAppConfig", () => {
       MINIO_USE_SSL: "true",
       MINIO_ACCESS_KEY: "esitv-prod-app-access",
       MINIO_SECRET_KEY: "prod-minio-random-value-32-characters-minimum",
+      NEXT_PUBLIC_MEDIA_URL: "https://s3.example.edu",
       REDIS_URL: "rediss://redis.example.edu:6379",
       MEDIA_WORKER_VERSION: "release-a1b2c3d4",
     }))
 
     assert.equal(config.deploymentMode, "production")
     assert.equal(config.minio.useSSL, true)
+    assert.equal(config.app.publicUrl, "https://web-tv.example.edu")
+    assert.equal(config.media.publicUrl, "https://s3.example.edu")
     assert.equal(config.livekit.publicUrl, "wss://livekit.example.edu")
     assert.equal(config.livekit.webhookUrl, "https://web-tv.example.edu/api/livekit/webhook")
   })
@@ -102,6 +110,7 @@ describe("loadAppConfig", () => {
       "DATABASE_URL",
       "AUTH_SECRET",
       "NEXTAUTH_URL",
+      "NEXT_PUBLIC_APP_URL",
       "LIVEKIT_API_KEY",
       "LIVEKIT_API_SECRET",
       "NEXT_PUBLIC_LIVEKIT_URL",
@@ -111,6 +120,7 @@ describe("loadAppConfig", () => {
       "MINIO_ACCESS_KEY",
       "MINIO_SECRET_KEY",
       "MINIO_VIDEO_BUCKET",
+      "NEXT_PUBLIC_MEDIA_URL",
       "REDIS_URL",
       "MEDIA_WORKER_VERSION",
     ]
@@ -127,10 +137,12 @@ describe("loadAppConfig", () => {
       ALLOW_DEMO_SEED: "true",
       DATABASE_URL: "postgresql://esitv:esitvpassword@localhost:5433/esitvdb",
       AUTH_SECRET: "replace-with-a-long-random-secret",
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000",
       LIVEKIT_API_KEY: "devkey",
       LIVEKIT_API_SECRET: "secret",
       MINIO_ACCESS_KEY: "minioadmin",
       MINIO_SECRET_KEY: "minioadmin",
+      NEXT_PUBLIC_MEDIA_URL: "http://localhost:9000",
       MEDIA_WORKER_VERSION: "local-dev",
       LIVEKIT_WEBHOOK_URL: "http://localhost:3000/api/livekit/webhook",
     })
@@ -144,6 +156,8 @@ describe("loadAppConfig", () => {
       assert.match(error.message, /MINIO_ACCESS_KEY/)
       assert.match(error.message, /MINIO_SECRET_KEY/)
       assert.match(error.message, /NEXTAUTH_URL/)
+      assert.match(error.message, /NEXT_PUBLIC_APP_URL/)
+      assert.match(error.message, /NEXT_PUBLIC_MEDIA_URL/)
       assert.match(error.message, /NEXT_PUBLIC_LIVEKIT_URL/)
       assert.match(error.message, /LIVEKIT_WEBHOOK_URL/)
       assert.match(error.message, /ALLOW_DEMO_SEED/)
@@ -172,6 +186,36 @@ describe("loadAppConfig", () => {
     assert.throws(
       () => loadAppConfig(baseEnv({ MEDIA_FFMPEG_THREADS: "32" })),
       /MEDIA_FFMPEG_THREADS/,
+    )
+  })
+
+  it("rejects unsafe public origins in production", () => {
+    assert.throws(
+      () => loadAppConfig(baseEnv({
+        APP_ENV: "production",
+        NEXTAUTH_URL: "https://web-tv.example.edu",
+        NEXT_PUBLIC_APP_URL: "https://admin.example.edu",
+        NEXT_PUBLIC_MEDIA_URL: "http://s3.example.edu",
+      })),
+      /NEXT_PUBLIC_APP_URL and NEXTAUTH_URL/,
+    )
+
+    assert.throws(
+      () => loadAppConfig(baseEnv({
+        APP_ENV: "production",
+        NEXTAUTH_URL: "https://web-tv.example.edu/app",
+        NEXT_PUBLIC_APP_URL: "https://web-tv.example.edu",
+        NEXT_PUBLIC_MEDIA_URL: "https://s3.example.edu/media",
+      })),
+      /origin URL/,
+    )
+
+    assert.throws(
+      () => loadAppConfig(baseEnv({
+        APP_ENV: "production",
+        NEXT_PUBLIC_MEDIA_URL: "http://localhost:9000",
+      })),
+      /NEXT_PUBLIC_MEDIA_URL/,
     )
   })
 

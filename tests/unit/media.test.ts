@@ -8,6 +8,7 @@ import {
   resolveVideoAssetObjectKey,
 } from "../../src/lib/media"
 import { buildAdaptiveRenditionPlan } from "../../src/lib/ffmpeg"
+import { rewriteUrlOrigin } from "../../src/lib/minio"
 import {
   CaptionValidationError,
   normalizeCaptionLanguage,
@@ -66,6 +67,16 @@ describe("media URL helpers", () => {
         "/api/media/videos/video%20id/hls/segment-0001.ts",
         "",
       ].join("\n"),
+    )
+  })
+
+  it("rewrites signed storage URLs to the configured public media origin", () => {
+    assert.equal(
+      rewriteUrlOrigin(
+        "http://minio:9000/esitv-videos/videos/demo.mp4?X-Amz-Signature=abc",
+        "https://s3.example.edu",
+      ),
+      "https://s3.example.edu/esitv-videos/videos/demo.mp4?X-Amz-Signature=abc",
     )
   })
 })

@@ -5,6 +5,19 @@ export const VIDEO_BUCKET_NAME = appConfig.minio.videoBucket
 
 let cachedMinioClient: Minio.Client | null = null
 
+export function rewriteUrlOrigin(url: string, publicOrigin: string) {
+  const signedUrl = new URL(url)
+  const originUrl = new URL(publicOrigin)
+  signedUrl.protocol = originUrl.protocol
+  signedUrl.hostname = originUrl.hostname
+  signedUrl.port = originUrl.port
+  return signedUrl.toString()
+}
+
+export function toPublicMediaUrl(url: string) {
+  return rewriteUrlOrigin(url, appConfig.media.publicUrl)
+}
+
 export function getMinioClient() {
   cachedMinioClient ??= new Minio.Client({
     endPoint: appConfig.minio.endpoint,

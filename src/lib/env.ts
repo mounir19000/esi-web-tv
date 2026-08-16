@@ -6,6 +6,9 @@ export type DeploymentMode = (typeof deploymentModes)[number]
 export type AppConfig = {
   deploymentMode: DeploymentMode
   isLocalLike: boolean
+  app: {
+    publicUrl: string
+  }
   database: {
     url: string
   }
@@ -38,6 +41,7 @@ export type AppConfig = {
     videoBucket: string
   }
   media: {
+    publicUrl: string
     signedUrlTtlSeconds: number
     maxDurationSeconds: number
     maxFramePixels: number
@@ -190,6 +194,24 @@ function parseUrl(env: RuntimeEnv, name: string, protocols: string[], issues: st
   return value
 }
 
+function parseOriginUrl(env: RuntimeEnv, name: string, protocols: string[], issues: string[]) {
+  const value = parseUrl(env, name, protocols, issues)
+  if (!value) {
+    return ""
+  }
+
+  try {
+    const url = new URL(value)
+    if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
+      issues.push(`${name} must be an origin URL without path, query, credentials, or hash.`)
+    }
+
+    return url.origin
+  } catch {
+    return value
+  }
+}
+
 function parseOptionalUrl(env: RuntimeEnv, name: string, protocols: string[], issues: string[]) {
   const value = readOptional(env, name)
   if (!value) {
@@ -253,6 +275,14 @@ function urlProtocol(value: string) {
   }
 }
 
+function urlOrigin(value: string) {
+  try {
+    return new URL(value).origin
+  } catch {
+    return ""
+  }
+}
+
 function containsAny(value: string, tokens: string[]) {
   const normalizedValue = value.toLowerCase()
   return tokens.some((token) => normalizedValue.includes(token))
@@ -305,18 +335,32 @@ function rejectProductionOnly(
     "docker-local",
   ])
 
+  rejectProductionLocalUrl(issues, "NEXT_PUBLIC_APP_URL", config.app.publicUrl)
   rejectProductionLocalUrl(issues, "NEXTAUTH_URL", config.auth.url)
+  rejectProductionLocalUrl(issues, "NEXT_PUBLIC_MEDIA_URL", config.media.publicUrl)
   rejectProductionLocalUrl(issues, "NEXT_PUBLIC_LIVEKIT_URL", config.livekit.publicUrl)
   if (config.livekit.webhookUrl) {
     rejectProductionLocalUrl(issues, "LIVEKIT_WEBHOOK_URL", config.livekit.webhookUrl)
+  }
+
+  if (urlProtocol(config.app.publicUrl) !== "https:") {
+    issues.push("NEXT_PUBLIC_APP_URL must use https in production.")
   }
 
   if (urlProtocol(config.auth.url) !== "https:") {
     issues.push("NEXTAUTH_URL must use https in production.")
   }
 
+  if (urlProtocol(config.media.publicUrl) !== "https:") {
+    issues.push("NEXT_PUBLIC_MEDIA_URL must use https in production.")
+  }
+
   if (urlProtocol(config.livekit.publicUrl) !== "wss:") {
     issues.push("NEXT_PUBLIC_LIVEKIT_URL must use wss in production.")
+  }
+
+  if (urlOrigin(config.app.publicUrl) !== urlOrigin(config.auth.url)) {
+    issues.push("NEXT_PUBLIC_APP_URL and NEXTAUTH_URL must use the same origin in production.")
   }
 
   if (config.seed.allowDemoSeed) {
@@ -379,12 +423,15 @@ export function loadAppConfig(env: RuntimeEnv = process.env): AppConfig {
   }
 
   const configWithoutMode = {
+    app: {
+      publicUrl: parseOriginUrl(env, "NEXT_PUBLIC_APP_URL", ["http:", "https:"], issues),
+    },
     database: {
       url: parseUrl(env, "DATABASE_URL", ["postgres:", "postgresql:"], issues),
     },
     auth: {
       secret: authSecret,
-      url: parseUrl(env, "NEXTAUTH_URL", ["http:", "https:"], issues),
+      url: parseOriginUrl(env, "NEXTAUTH_URL", ["http:", "https:"], issues),
       google: parseGoogleConfig(env, issues),
     },
     livekit: {
@@ -409,6 +456,7 @@ export function loadAppConfig(env: RuntimeEnv = process.env): AppConfig {
       videoBucket: readRequired(env, "MINIO_VIDEO_BUCKET", issues),
     },
     media: {
+      publicUrl: parseOriginUrl(env, "NEXT_PUBLIC_MEDIA_URL", ["http:", "https:"], issues),
       signedUrlTtlSeconds: mediaSignedUrlTtlSeconds,
       maxDurationSeconds: mediaMaxDurationSeconds,
       maxFramePixels: mediaMaxFramePixels,

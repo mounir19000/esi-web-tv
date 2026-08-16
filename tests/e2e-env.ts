@@ -34,6 +34,11 @@ const liveKitApiSecret =
     : "dev-secret-key-change-me-32-chars-minimum")
 
 export const e2ePort = Number.parseInt(process.env.E2E_PORT ?? "3100", 10)
+const nextAuthUrl = process.env.E2E_NEXTAUTH_URL ?? `http://localhost:${e2ePort}`
+const minioEndpoint = process.env.E2E_MINIO_ENDPOINT ?? process.env.MINIO_ENDPOINT ?? "localhost"
+const minioPort = process.env.E2E_MINIO_PORT ?? process.env.MINIO_PORT ?? "9000"
+const minioUseSsl = process.env.E2E_MINIO_USE_SSL ?? process.env.MINIO_USE_SSL ?? "false"
+const minioProtocol = minioUseSsl === "true" ? "https" : "http"
 
 export const e2eRun = {
   id: runId,
@@ -52,7 +57,8 @@ export const e2eEnv = {
   ALLOW_DEMO_SEED: "false",
   DATABASE_URL: databaseUrl,
   AUTH_SECRET: process.env.E2E_AUTH_SECRET ?? "e2e-auth-secret-with-at-least-32-characters",
-  NEXTAUTH_URL: process.env.E2E_NEXTAUTH_URL ?? `http://localhost:${e2ePort}`,
+  NEXTAUTH_URL: nextAuthUrl,
+  NEXT_PUBLIC_APP_URL: process.env.E2E_PUBLIC_APP_URL ?? nextAuthUrl,
   AUTH_TRUST_HOST: "true",
   LIVEKIT_API_KEY: process.env.E2E_LIVEKIT_API_KEY ?? process.env.LIVEKIT_API_KEY ?? "devkey",
   LIVEKIT_API_SECRET: liveKitApiSecret,
@@ -64,13 +70,14 @@ export const e2eEnv = {
   LIVEKIT_MAX_PARTICIPANTS: process.env.LIVEKIT_MAX_PARTICIPANTS ?? "100",
   LIVEKIT_PUBLIC_MAX_PARTICIPANTS: process.env.LIVEKIT_PUBLIC_MAX_PARTICIPANTS ?? "50",
   LIVEKIT_RECORDING_ENABLED: process.env.LIVEKIT_RECORDING_ENABLED ?? "false",
-  MINIO_ENDPOINT: process.env.E2E_MINIO_ENDPOINT ?? process.env.MINIO_ENDPOINT ?? "localhost",
-  MINIO_PORT: process.env.E2E_MINIO_PORT ?? process.env.MINIO_PORT ?? "9000",
-  MINIO_USE_SSL: process.env.E2E_MINIO_USE_SSL ?? process.env.MINIO_USE_SSL ?? "false",
+  MINIO_ENDPOINT: minioEndpoint,
+  MINIO_PORT: minioPort,
+  MINIO_USE_SSL: minioUseSsl,
   MINIO_ACCESS_KEY: process.env.E2E_MINIO_ACCESS_KEY ?? process.env.MINIO_ROOT_USER ?? "local-minio-root",
   MINIO_SECRET_KEY:
     process.env.E2E_MINIO_SECRET_KEY ?? process.env.MINIO_ROOT_PASSWORD ?? "local-minio-root-password-change-me",
   MINIO_VIDEO_BUCKET: bucketName,
+  NEXT_PUBLIC_MEDIA_URL: process.env.E2E_PUBLIC_MEDIA_URL ?? `${minioProtocol}://${minioEndpoint}:${minioPort}`,
   REDIS_URL: process.env.E2E_REDIS_URL ?? process.env.REDIS_URL ?? "redis://localhost:6379",
   MEDIA_SIGNED_URL_TTL_SECONDS: process.env.MEDIA_SIGNED_URL_TTL_SECONDS ?? "60",
   MEDIA_MAX_DURATION_SECONDS: process.env.MEDIA_MAX_DURATION_SECONDS ?? "14400",
