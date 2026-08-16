@@ -1,7 +1,7 @@
 import { Readable } from "node:stream"
 import { NextResponse } from "next/server"
 import { appConfig } from "@/lib/env"
-import { getMinioClient, VIDEO_BUCKET_NAME } from "@/lib/minio"
+import { getMinioClient, toPublicMediaUrl, VIDEO_BUCKET_NAME } from "@/lib/minio"
 import { MEDIA_OBJECT_PREFIXES, rewriteHlsPlaylist } from "@/lib/media"
 
 const defaultSignedUrlTtlSeconds = 60
@@ -95,7 +95,7 @@ export async function protectedMediaResponse(videoId: string, storageKey: string
     "response-cache-control": `private, max-age=${signedUrlTtlSeconds}`,
   })
 
-  const response = NextResponse.redirect(signedUrl, 307)
+  const response = NextResponse.redirect(toPublicMediaUrl(signedUrl), 307)
   Object.entries(protectedMediaHeaders).forEach(([header, value]) => {
     response.headers.set(header, value)
   })

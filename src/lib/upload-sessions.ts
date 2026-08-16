@@ -1,7 +1,7 @@
 import { randomUUID, createHash } from "node:crypto"
 import { AudienceType, UploadSessionState, type UploadSession, type VideoType } from "@prisma/client"
 import prisma from "@/lib/prisma"
-import { getMinioClient, initBuckets, VIDEO_BUCKET_NAME } from "@/lib/minio"
+import { getMinioClient, initBuckets, toPublicMediaUrl, VIDEO_BUCKET_NAME } from "@/lib/minio"
 import { MEDIA_OBJECT_PREFIXES } from "@/lib/media"
 import { enqueueVideoProcessing } from "@/lib/media-queue"
 import {
@@ -84,10 +84,12 @@ async function signUploadParts(session: UploadSession, partNumbers?: number[]): 
   return Promise.all(
     parts.map(async (part) => ({
       ...part,
-      url: await getMultipartClient().presignedUrl("PUT", VIDEO_BUCKET_NAME, session.objectKey, uploadUrlTtlSeconds, {
-        partNumber: String(part.partNumber),
-        uploadId: session.multipartUploadId,
-      }),
+      url: toPublicMediaUrl(
+        await getMultipartClient().presignedUrl("PUT", VIDEO_BUCKET_NAME, session.objectKey, uploadUrlTtlSeconds, {
+          partNumber: String(part.partNumber),
+          uploadId: session.multipartUploadId,
+        }),
+      ),
     })),
   )
 }

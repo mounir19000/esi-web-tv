@@ -15,12 +15,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: .node-version
           cache: npm
 
       - name: Install dependencies
@@ -73,13 +73,16 @@ jobs:
       - name: Dependency audit
         run: npm run audit
 
+      - name: Production dependency audit
+        run: npm run audit:prod
+
       - name: Capture Docker logs
         if: failure()
         run: docker compose --env-file .env.local.example logs --no-color > docker-compose.log
 
       - name: Upload diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ci-diagnostics
           path: |

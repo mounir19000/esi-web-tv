@@ -2,6 +2,11 @@
   "name": "esi-web-tv",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "npm@11.13.0",
+  "engines": {
+    "node": ">=22 <25",
+    "npm": ">=10.9 <12"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -15,6 +20,7 @@
     "test:e2e": "playwright test",
     "test": "npm run test:unit && npm run test:integration",
     "audit": "npm audit --audit-level=high",
+    "audit:prod": "npm audit --omit=dev --audit-level=high",
     "test:livekit-smoke": "tsx scripts/livekit-smoke.ts",
     "reconcile:livekit": "tsx scripts/reconcile-livekit.ts",
     "db:seed-listing-fixtures": "tsx scripts/seed-listing-fixtures.ts",

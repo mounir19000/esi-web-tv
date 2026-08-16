@@ -2,7 +2,7 @@
 
 ESI Web TV is a self-hosted web television platform for École nationale Supérieure d'Informatique. It gives students, teachers, admins, clubs, and public visitors one place to watch recorded videos, join live broadcasts, and manage educational media.
 
-## Features
+## Implemented Features
 
 - Public video library for club content, explanations, and open broadcasts
 - Role-based access for guests, students, teachers, and admins
@@ -13,7 +13,14 @@ ESI Web TV is a self-hosted web television platform for École nationale Supéri
 - Video storage through MinIO
 - Source-aware HLS transcoding, thumbnail generation, and WebVTT caption playback through FFmpeg
 - PostgreSQL database with Prisma ORM
-- End-to-end Playwright tests for auth, upload, and live flows
+- End-to-end Playwright tests for accessibility, auth, upload, session revocation, and live flows
+
+## Operational Capabilities
+
+- Production Compose stack with app, worker, PostgreSQL, Redis, MinIO, LiveKit, Egress, Caddy, and optional Prometheus
+- Health, readiness, and metrics endpoints
+- PostgreSQL and MinIO backup and restore scripts
+- Dependabot updates plus development and production dependency audit checks
 
 ## Tech Stack
 
@@ -35,13 +42,23 @@ Install dependencies:
 npm install
 ```
 
-Create an explicit local environment file and edit the placeholder values:
+Start from the committed secret-free environment template, or use the local example for runnable defaults:
 
 ```bash
+cp .env.example .env.local
+# or
 cp .env.local.example .env.local
 ```
 
 Generate strong local values with `openssl rand -base64 32`. Runtime config is validated at startup; production mode fails if required variables are missing, point at localhost, or use known sample values.
+
+The browser-facing origins must be explicit:
+
+| Variable | Purpose |
+| --- | --- |
+| `NEXT_PUBLIC_APP_URL` | Public web app origin; must match `NEXTAUTH_URL` in production |
+| `NEXT_PUBLIC_MEDIA_URL` | Public S3/MinIO origin used for direct uploads and signed media redirects |
+| `NEXT_PUBLIC_LIVEKIT_URL` | Public LiveKit WebSocket origin; production must use `wss://` |
 
 Start the local services:
 
@@ -112,6 +129,7 @@ npm run test:unit
 npm run test:integration
 npm run test:e2e
 npm run audit
+npm run audit:prod
 npm run test:livekit-smoke
 npm run reconcile:livekit
 DOTENV_CONFIG_PATH=.env.local npm run db:seed-listing-fixtures
@@ -151,6 +169,18 @@ ENV_FILE=.env.production ./scripts/backup-postgres.sh
 ENV_FILE=.env.production ./scripts/backup-minio.sh
 ```
 
+Keep dependency and GitHub Actions updates current with the process in [Security And Dependency Policy](docs/security-dependency-policy.md).
+
+## Google OAuth
+
+Google sign-in is optional. Leave `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` empty to disable the Google button. To enable it:
+
+1. Create an OAuth web client in Google Cloud.
+2. Add the production callback URI: `https://<APP_DOMAIN>/api/auth/callback/google`.
+3. Add the local callback URI when needed: `http://localhost:3000/api/auth/callback/google`.
+4. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` together.
+5. Restrict account access through ESI provisioning after sign-in; only approved `@esi.dz` users receive authenticated app access.
+
 ## LiveKit Deployment Notes
 
 Local Compose runs LiveKit from the pinned `livekit/livekit-server:v1.13.4` image digest and mounts `livekit.yaml` for ports and RTC settings. `scripts/start-livekit.sh` writes the LiveKit key file inside the container from `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`; the credential value is never printed in logs. When `LIVEKIT_WEBHOOK_URL` is set, the script appends a signed webhook target to the runtime config. The local browser endpoint is configured by `NEXT_PUBLIC_LIVEKIT_URL`.
@@ -181,7 +211,7 @@ Thumbnail state is tracked separately from video readiness. A video can still be
 
 Only `READY` videos appear in public and scoped library listings. Owners and admins can open processing or failed uploads directly and retry failed processing from the video page.
 
-The MinIO API endpoint must be reachable from the browser and allow CORS requests from the Next.js origin for direct-upload `PUT`, `POST`, `DELETE`, `GET`, and `HEAD`. HLS manifests, HLS segments, and captions are served through protected app routes after authorization; large source fallbacks and thumbnails use short-lived signed redirects. Expose the `ETag` header if you add client-side part verification.
+The MinIO/S3 API endpoint in `NEXT_PUBLIC_MEDIA_URL` must be reachable from the browser and allow CORS requests from `NEXT_PUBLIC_APP_URL` for direct-upload `PUT`, `POST`, `DELETE`, `GET`, and `HEAD`. The server may talk to MinIO through `MINIO_ENDPOINT`, but every presigned browser URL is rewritten to `NEXT_PUBLIC_MEDIA_URL`. HLS manifests, HLS segments, and captions are served through protected app routes after authorization; large source fallbacks and thumbnails use short-lived signed redirects. Expose the `ETag` header if you add client-side part verification.
 
 The application and media worker use `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY`, not root credentials. Local Compose provisions a limited MinIO user through `scripts/init-minio.sh` and `config/minio/app-policy.json`; production should provision an equivalent service account out of band and rotate it separately from the root/admin account.
 
@@ -211,8 +241,12 @@ For production, store `DATABASE_URL`, `AUTH_SECRET`, LiveKit credentials, MinIO 
 Run the quick local suites:
 
 ```bash
+npm run format:check
+npm run lint
 npm run typecheck
 npm run test
+npm run audit
+npm run audit:prod
 ```
 
 Run the full browser test suite:
@@ -232,6 +266,7 @@ DOTENV_CONFIG_PATH=.env.local npm run db:explain-listings
 
 The tests cover:
 
+- Accessibility landmarks, skip links, mobile navigation, focus handling, and caption tracks
 - Teacher login, dashboard access, and student restrictions
 - Upload API authorization and validation failures
 - Browser upload through a real multipart object, backend processing to `READY`, generated HLS/thumbnail assets, and protected media authorization
